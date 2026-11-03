@@ -26,7 +26,6 @@ chaquopy {
         pip {
             // pure-python builds (NO_EXTENSIONS env vars are set by the CI workflow)
             install("-r", "requirements-android.txt")
-            install("--no-deps", "xknx==4.0.0")
         }
     }
 }
