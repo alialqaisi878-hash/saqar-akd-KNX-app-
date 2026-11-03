@@ -20,7 +20,7 @@ jobs:
       - name: Build
         run: |
           pip install aiohttp==3.14.5 pyinstaller
-          pyinstaller --onefile --console --name SaqarETS ets/ets_remote.py
+          pyinstaller --onefile --noconsole --name SaqarETS --paths ets ets/saqar_ets_gui.py
       - name: Publish exe to the exe branch
         shell: bash
         run: |
