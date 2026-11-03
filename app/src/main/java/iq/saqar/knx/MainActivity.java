@@ -1,10 +1,13 @@
 package iq.saqar.knx;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,31 +15,29 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
-import android.view.Gravity;
+import android.text.InputType;
 import android.view.View;
-import android.view.WindowManager;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.FrameLayout;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
-/** The wall-screen view: shows the floor plan served by the local bridge. */
+import org.json.JSONObject;
+
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+/** KNX Prog: the bridge's own screen. Shows whether the house is connected; settings need the installer password. */
 public class MainActivity extends Activity {
-    private static final String LOCAL = "http://127.0.0.1:8080/";
-    private static final int PICK_FILE = 7;
-    private WebView web;
-    private ValueCallback<Uri[]> pending;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private TextView knx, relay, link, house;
+    private String linkText = "";
+    private final Runnable poll = this::refresh;
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (!Config.isConfigured(this)) {
             startActivity(new Intent(this, SettingsActivity.class));
             finish();
@@ -45,64 +46,130 @@ public class MainActivity extends Activity {
         BridgeService.start(this);
         askPermissions();
 
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0f172a"));
-        web = new WebView(this);
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        web.setWebViewClient(new WebViewClient() {
-            @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
-                if (r.isForMainFrame()) {
-                    v.loadData("<html><body style='background:#0f172a;color:#e2e8f0;font-family:sans-serif;"
-                            + "display:flex;align-items:center;justify-content:center;height:100vh'>"
-                            + "<h2 dir='rtl'>جاري التشغيل...</h2></body></html>", "text/html; charset=utf-8", "UTF-8");
-                    ui.postDelayed(() -> web.loadUrl(LOCAL), 2000);
-                }
-            }
-        });
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
-                if (pending != null) pending.onReceiveValue(null);
-                pending = cb;
-                try {
-                    startActivityForResult(p.createIntent(), PICK_FILE);
-                } catch (Exception e) {
-                    pending = null;
-                    return false;
-                }
-                return true;
-            }
-        });
-        root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout l = new LinearLayout(this);
+        l.setOrientation(LinearLayout.VERTICAL);
+        l.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        l.setPadding(48, 64, 48, 48);
+        l.setBackgroundColor(Color.parseColor("#0f172a"));
 
-        TextView gear = new TextView(this);
-        gear.setText("⚙");
-        gear.setTextSize(22);
-        gear.setTextColor(Color.argb(140, 255, 255, 255));
-        gear.setPadding(24, 12, 24, 12);
-        gear.setOnLongClickListener(v -> { openSettings(); return true; });
-        gear.setOnClickListener(v -> web.loadUrl(LOCAL));
-        FrameLayout.LayoutParams gp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
-        root.addView(gear, gp);
-        setContentView(root);
-        web.loadUrl(LOCAL);
+        l.addView(text("KNX Prog", 28, "#7dd3fc"));
+        l.addView(text("جسر المنظومة. خلّي هذا الجهاز شغّال ومتصل بالنت دايماً.", 14, "#94a3b8"));
+        house = text("", 18, "#e2e8f0");
+        l.addView(house);
+        knx = row(l, "الـ IP Router");
+        relay = row(l, "سيرفر الشركة");
+        link = text("", 15, "#7dd3fc");
+        link.setTextDirection(View.TEXT_DIRECTION_LTR);
+        link.setPadding(0, 24, 0, 8);
+        link.setOnClickListener(v -> {
+            if (linkText.isEmpty()) return;
+            ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("link", linkText));
+            Toast.makeText(this, "تم نسخ الرابط", Toast.LENGTH_SHORT).show();
+        });
+        l.addView(link);
+        l.addView(text("اضغط على الرابط حتى تنسخه.", 12, "#64748b"));
+
+        Button panel = button("فتح الصفحة (التعديل)");
+        panel.setOnClickListener(v -> startActivity(new Intent(this, PanelActivity.class)));
+        l.addView(panel);
+        Button settings = button("الإعدادات (الفني)");
+        settings.setOnClickListener(v -> openSettings());
+        l.addView(settings);
+
+        ScrollView sv = new ScrollView(this);
+        sv.setBackgroundColor(Color.parseColor("#0f172a"));
+        sv.addView(l);
+        setContentView(sv);
+    }
+
+    @Override protected void onResume() { super.onResume(); ui.post(poll); }
+    @Override protected void onPause() { super.onPause(); ui.removeCallbacks(poll); }
+
+    private void refresh() {
+        new Thread(() -> {
+            JSONObject o = null;
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL("http://127.0.0.1:8080/api/bridge").openConnection();
+                c.setConnectTimeout(1500);
+                c.setReadTimeout(1500);
+                o = new JSONObject(Config.readAll(c.getInputStream()));
+            } catch (Exception ignored) { }
+            final JSONObject s = o;
+            runOnUiThread(() -> show(s));
+        }).start();
+        ui.postDelayed(poll, 3000);
+    }
+
+    private void show(JSONObject s) {
+        if (s == null) {
+            house.setText("جاري تشغيل الجسر...");
+            set(knx, "...", "#fbbf24");
+            set(relay, "...", "#fbbf24");
+            return;
+        }
+        house.setText("البيت: " + s.optString("house") + "   ·   الراوتر: " + s.optString("gateway"));
+        String k = s.optJSONObject("knx") != null ? s.optJSONObject("knx").optString("state") : "";
+        set(knx, "connected".equals(k) ? "متصل ✓" : "connecting".equals(k) ? "جاري الاتصال..." : "غير متصل ✕",
+                "connected".equals(k) ? "#4ade80" : "connecting".equals(k) ? "#fbbf24" : "#f87171");
+        JSONObject r = s.optJSONObject("relay");
+        String rs = r != null ? r.optString("state") : "";
+        String rt = "connected".equals(rs) ? "متصل ✓" : "refused".equals(rs) ? "مرفوض: اسم البيت مستخدم" :
+                "error".equals(rs) ? "ما يوصل (تأكد من النت)" : "جاري الاتصال...";
+        set(relay, rt, "connected".equals(rs) ? "#4ade80" : "connecting".equals(rs) || "off".equals(rs) ? "#fbbf24" : "#f87171");
+        linkText = s.optString("link").replace("https://srv2056159.hstgr.cloud/knx/h/", Config.PUBLIC_BASE);
+        link.setText(linkText);
+    }
+
+    private TextView row(LinearLayout l, String label) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setPadding(32, 28, 32, 28);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#1e293b"));
+        bg.setCornerRadius(24);
+        r.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = 20;
+        TextView name = text(label, 16, "#e2e8f0");
+        r.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView v = text("...", 16, "#fbbf24");
+        r.addView(v);
+        l.addView(r, lp);
+        return v;
+    }
+
+    private void set(TextView t, String s, String color) { t.setText(s); t.setTextColor(Color.parseColor(color)); }
+
+    private TextView text(String s, int size, String color) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(size);
+        t.setTextColor(Color.parseColor(color));
+        t.setPadding(0, 8, 0, 8);
+        return t;
+    }
+
+    private Button button(String s) {
+        Button b = new Button(this);
+        b.setText(s);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = 24;
+        b.setLayoutParams(lp);
+        return b;
     }
 
     /** The settings screen is for the installer only. */
     private void openSettings() {
         String need = Config.load(this).optString("installer_password");
         if (need.isEmpty()) { startActivity(new Intent(this, SettingsActivity.class)); return; }
-        android.widget.EditText e = new android.widget.EditText(this);
-        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        new android.app.AlertDialog.Builder(this)
+        EditText e = new EditText(this);
+        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        new AlertDialog.Builder(this)
                 .setTitle("باسورد الفني")
                 .setView(e)
                 .setPositiveButton("دخول", (d, w) -> {
                     if (e.getText().toString().trim().equals(need)) startActivity(new Intent(this, SettingsActivity.class));
-                    else android.widget.Toast.makeText(this, "باسورد غلط", android.widget.Toast.LENGTH_SHORT).show();
+                    else Toast.makeText(this, "باسورد غلط", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("إلغاء", null)
                 .show();
@@ -117,27 +184,5 @@ public class MainActivity extends Activity {
                         Uri.parse("package:" + getPackageName())));
             } catch (Exception ignored) { }
         }
-    }
-
-    @Override protected void onActivityResult(int req, int res, Intent data) {
-        super.onActivityResult(req, res, data);
-        if (req == PICK_FILE && pending != null) {
-            pending.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res, data));
-            pending = null;
-        }
-    }
-
-    @Override public void onWindowFocusChanged(boolean focus) {
-        super.onWindowFocusChanged(focus);
-        if (focus) {
-            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-        }
-    }
-
-    @Override public void onBackPressed() {
-        if (web != null && web.canGoBack()) web.goBack();
     }
 }

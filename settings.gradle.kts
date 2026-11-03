@@ -5,4 +5,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "SaqarKNX"
-include(":app")
+include(":app", ":control")

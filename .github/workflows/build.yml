@@ -35,14 +35,19 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: SaqarKNX-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            control/build/outputs/apk/debug/*.apk
       - name: Publish APK to the apk branch
         run: |
-          mkdir -p /tmp/out && cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/SaqarKNX.apk
+          mkdir -p /tmp/out
+          cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/KNXProg.apk
+          cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/SaqarKNX.apk
+          cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/AKDKNX.apk
           cd /tmp/out
           git init -q -b apk
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add SaqarKNX.apk
+          git add *.apk
           git commit -q -m "APK from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" apk

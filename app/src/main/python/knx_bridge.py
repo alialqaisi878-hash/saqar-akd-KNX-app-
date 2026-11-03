@@ -37,6 +37,7 @@ log = logging.getLogger("bridge")
 
 clients: set[web.WebSocketResponse] = set()
 status = {"state": "connecting", "detail": ""}
+relay_state = {"state": "off", "detail": ""}  # connection to the company server
 xknx: XKNX | None = None
 
 
@@ -178,6 +179,14 @@ def is_installer(req) -> bool:
     if not INSTALLER_PW:
         return True  # no installer password set: everything stays open as before
     return req.cookies.get("knxinst") == INST_TOKEN or req.headers.get("X-Key") == INSTALLER_PW
+
+
+async def bridge_info(_req):
+    """Status for the KNX Prog app screen."""
+    return web.json_response({
+        "knx": status, "relay": relay_state, "link": remote_url["url"],
+        "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""),
+    })
 
 
 async def role(req):
@@ -379,6 +388,7 @@ async def relay_loop() -> None:
                         print("  ==============================================\n")
                         shown = True
                     log.info("Connected to relay server as house '%s'", house)
+                    relay_state.update(state="connected", detail="")
                     broadcast({"t": "remote", "url": link})
                     async for msg in ws:
                         if msg.type != aiohttp.WSMsgType.TEXT:
@@ -389,10 +399,13 @@ async def relay_loop() -> None:
                         elif m.get("op") == "stream":
                             asyncio.ensure_future(do_stream(session, m))
                 log.warning("Relay server disconnected, retrying")
+                relay_state.update(state="connecting", detail="")
             except aiohttp.WSServerHandshakeError as err:
                 log.error("Relay refused (%s)%s", err.status, ": house name taken by another key" if err.status == 403 else "")
+                relay_state.update(state="refused" if err.status == 403 else "error", detail=str(err.status))
             except Exception as err:  # noqa: BLE001
                 log.error("Cannot reach relay server: %s", err)
+                relay_state.update(state="error", detail=str(err)[:120])
             await asyncio.sleep(5)
 
 
@@ -510,6 +523,7 @@ async def main() -> None:
         web.get("/ets", ets_tunnel),
         web.get("/api/project", get_project),
         web.get("/api/role", role),
+        web.get("/api/bridge", bridge_info),
         web.post("/api/installer", installer_login),
         web.post("/api/installer/logout", installer_logout),
         web.put("/api/project", put_project),
