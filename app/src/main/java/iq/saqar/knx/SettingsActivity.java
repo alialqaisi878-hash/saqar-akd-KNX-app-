@@ -41,6 +41,10 @@ public class SettingsActivity extends Activity {
 
         house = field(l, "اسم البيت (إنگليزي بدون فراغات، مثلاً ahmed-villa)", c.optString("house_id"), false);
         ip = field(l, "ايبي الـ IP Router بالبيت (مثلاً 192.168.1.230)", c.optString("gateway_ip"), false);
+        Button find = new Button(this);
+        find.setText("ابحث عن الراوتر");
+        find.setOnClickListener(v -> findRouter(find));
+        l.addView(find);
         pw = field(l, "باسورد الزبون للرابط من برة البيت", c.optString("remote_password"), false);
         relay = field(l, "سيرفر الشركة (لا تغيّره)", c.optString("relay_url", Config.DEFAULT_RELAY), false);
 
@@ -149,6 +153,35 @@ public class SettingsActivity extends Activity {
         Intent main = Intent.makeRestartActivityTask(i.getComponent());
         startActivity(main);
         Runtime.getRuntime().exit(0);
+    }
+
+    private void findRouter(Button btn) {
+        btn.setEnabled(false);
+        btn.setText("جاري البحث...");
+        android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+        android.net.wifi.WifiManager.MulticastLock lock = wm != null ? wm.createMulticastLock("saqar:find") : null;
+        if (lock != null) lock.acquire();
+        new Thread(() -> {
+            java.util.List<KnxFinder.Found> found = KnxFinder.search(3500);
+            if (lock != null && lock.isHeld()) lock.release();
+            runOnUiThread(() -> {
+                btn.setEnabled(true);
+                btn.setText("ابحث عن الراوتر");
+                if (found.isEmpty()) {
+                    toast("ما لگيت راوتر. تأكد إن الآيباد على واي فاي البيت والـ IP Router مربوط بنفس الشبكة");
+                } else if (found.size() == 1) {
+                    ip.setText(found.get(0).ip);
+                    toast("لگيت: " + found.get(0).name + "  " + found.get(0).ip);
+                } else {
+                    String[] items = new String[found.size()];
+                    for (int i = 0; i < items.length; i++) items[i] = found.get(i).name + "   " + found.get(i).ip;
+                    new android.app.AlertDialog.Builder(this)
+                            .setTitle("اختار الراوتر")
+                            .setItems(items, (d, w) -> ip.setText(found.get(w).ip))
+                            .show();
+                }
+            });
+        }).start();
     }
 
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
