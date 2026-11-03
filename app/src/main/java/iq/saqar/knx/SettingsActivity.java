@@ -22,7 +22,7 @@ import java.io.File;
 /** First-run / installer screen: house name, IP router address, password. */
 public class SettingsActivity extends Activity {
     private static final int PICK_PROJECT = 9;
-    private EditText house, ip, pw, relay;
+    private EditText house, ip, pw, inst, relay;
     private TextView link;
 
     @Override protected void onCreate(Bundle b) {
@@ -46,6 +46,7 @@ public class SettingsActivity extends Activity {
         find.setOnClickListener(v -> findRouter(find));
         l.addView(find);
         pw = field(l, "باسورد الزبون للرابط من برة البيت", c.optString("remote_password"), false);
+        inst = field(l, "باسورد الفني (للتعديل وبرمجة ETS، لا تنطيه للزبون)", c.optString("installer_password"), false);
         relay = field(l, "سيرفر الشركة (لا تغيّره)", c.optString("relay_url", Config.DEFAULT_RELAY), false);
 
         link = text("", 15);
@@ -106,13 +107,16 @@ public class SettingsActivity extends Activity {
         String h = house.getText().toString().trim().toLowerCase();
         String i = ip.getText().toString().trim();
         String p = pw.getText().toString().trim();
+        String ins = inst.getText().toString().trim();
         String r = relay.getText().toString().trim();
         if (!h.matches("[a-z0-9_-]{3,40}")) { toast("اسم البيت: حروف إنگليزية وأرقام و - فقط"); return; }
         if (!i.matches("\\d{1,3}(\\.\\d{1,3}){3}")) { toast("الايبي مو صحيح"); return; }
         if (p.length() < 6) { toast("الباسورد لازم 6 أحرف أو أكثر"); return; }
+        if (ins.length() < 6) { toast("باسورد الفني لازم 6 أحرف أو أكثر"); return; }
+        if (ins.equals(p)) { toast("باسورد الفني لازم يختلف عن باسورد الزبون"); return; }
         if (r.isEmpty()) r = Config.DEFAULT_RELAY;
         try {
-            Config.save(this, h, i, p, r);
+            Config.save(this, h, i, p, ins, r);
         } catch (Exception e) {
             toast("ما انحفظ: " + e.getMessage());
             return;
@@ -134,6 +138,7 @@ public class SettingsActivity extends Activity {
                 house.setText(o.optString("house_id"));
                 ip.setText(o.optString("gateway_ip"));
                 pw.setText(o.optString("remote_password"));
+                inst.setText(o.optString("installer_password"));
                 relay.setText(o.optString("relay_url", Config.DEFAULT_RELAY));
                 updateLink();
                 toast("تم استيراد إعدادات البيت، اضغط حفظ وتشغيل");

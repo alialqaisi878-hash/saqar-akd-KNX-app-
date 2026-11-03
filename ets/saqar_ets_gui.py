@@ -75,7 +75,7 @@ class Worker:
                             self.say("wait", "انقطع الاتصال، دا يعيد المحاولة...")
                     except aiohttp.WSServerHandshakeError as err:
                         if err.status == 401:
-                            self.say("bad", "الباسورد غلط")
+                            self.say("bad", "باسورد الفني غلط")
                             return
                         if err.status == 503:
                             self.say("bad", "البيت غير متصل (تابليت البيت طافي أو بدون نت). يعيد المحاولة...")
@@ -129,7 +129,7 @@ class App:
         saved = self.load()
         self.house = self.field(card, "اسم البيت (مثلاً saqar-home)", saved.get("house", ""))
         self.link = self.field(card, "أو الرابط الكامل (اختياري)", saved.get("link", ""))
-        self.pw = self.field(card, "باسورد البيت", saved.get("password", ""), secret=True)
+        self.pw = self.field(card, "باسورد الفني", saved.get("password", ""), secret=True)
         self.port = self.field(card, "البورت بـ ETS", str(saved.get("port", 3700)))
 
         btns = tk.Frame(root, bg=BG)

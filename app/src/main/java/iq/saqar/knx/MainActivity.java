@@ -83,12 +83,29 @@ public class MainActivity extends Activity {
         gear.setTextSize(22);
         gear.setTextColor(Color.argb(140, 255, 255, 255));
         gear.setPadding(24, 12, 24, 12);
-        gear.setOnLongClickListener(v -> { startActivity(new Intent(this, SettingsActivity.class)); return true; });
+        gear.setOnLongClickListener(v -> { openSettings(); return true; });
         gear.setOnClickListener(v -> web.loadUrl(LOCAL));
         FrameLayout.LayoutParams gp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
         root.addView(gear, gp);
         setContentView(root);
         web.loadUrl(LOCAL);
+    }
+
+    /** The settings screen is for the installer only. */
+    private void openSettings() {
+        String need = Config.load(this).optString("installer_password");
+        if (need.isEmpty()) { startActivity(new Intent(this, SettingsActivity.class)); return; }
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("باسورد الفني")
+                .setView(e)
+                .setPositiveButton("دخول", (d, w) -> {
+                    if (e.getText().toString().trim().equals(need)) startActivity(new Intent(this, SettingsActivity.class));
+                    else android.widget.Toast.makeText(this, "باسورد غلط", android.widget.Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("إلغاء", null)
+                .show();
     }
 
     private void askPermissions() {

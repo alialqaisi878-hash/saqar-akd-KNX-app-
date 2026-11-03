@@ -114,7 +114,7 @@ async def main() -> None:
         print("\n  Saqar KNX - remote ETS programming\n")
         house = input("  House name (e.g. ahmed-villa) or full link: ").strip()
         url = house if house.startswith("http") else BASE + house.strip("/").lower()
-        pw = input("  House password: ").strip()
+        pw = input("  Installer password: ").strip()
         CFG_FILE.write_text(json.dumps({"url": url, "password": pw, "port": 3700}, indent=2), encoding="utf-8")
         print(f"  Saved to {CFG_FILE.name}. To change house later delete that file or run with --setup.\n")
     cfg = json.loads(CFG_FILE.read_text(encoding="utf-8"))

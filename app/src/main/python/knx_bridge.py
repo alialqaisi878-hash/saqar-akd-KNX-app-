@@ -169,6 +169,38 @@ async def knx_loop() -> None:
 REMOTE_PW = str(CFG.get("remote_password") or "")
 TOKEN = hashlib.sha256(("knx-bridge|" + REMOTE_PW).encode()).hexdigest() if REMOTE_PW else ""
 remote_url = {"url": ""}
+# installer (programmer) password: edit mode, saving the project and remote ETS need it
+INSTALLER_PW = str(CFG.get("installer_password") or "")
+INST_TOKEN = hashlib.sha256(("knx-installer|" + INSTALLER_PW).encode()).hexdigest() if INSTALLER_PW else ""
+
+
+def is_installer(req) -> bool:
+    if not INSTALLER_PW:
+        return True  # no installer password set: everything stays open as before
+    return req.cookies.get("knxinst") == INST_TOKEN or req.headers.get("X-Key") == INSTALLER_PW
+
+
+async def role(req):
+    return web.json_response({"installer": is_installer(req), "locked": bool(INSTALLER_PW)})
+
+
+async def installer_login(req):
+    try:
+        pw = (await req.json()).get("pw", "")
+    except Exception:  # noqa: BLE001
+        pw = ""
+    if INSTALLER_PW and pw == INSTALLER_PW:
+        resp = web.json_response({"ok": True})
+        resp.set_cookie("knxinst", INST_TOKEN, max_age=3600 * 12, httponly=True, secure=is_remote(req), samesite="Lax")
+        return resp
+    await asyncio.sleep(1)
+    return web.json_response({"ok": False}, status=403)
+
+
+async def installer_logout(_req):
+    resp = web.json_response({"ok": True})
+    resp.del_cookie("knxinst")
+    return resp
 
 LOGIN_HTML = """<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>دخول</title>
@@ -193,7 +225,7 @@ def authed(req) -> bool:
 
 @web.middleware
 async def auth_mw(req, handler):
-    if req.path in ("/login", "/ping") or not is_remote(req) or authed(req):
+    if req.path in ("/login", "/ping") or not is_remote(req) or authed(req) or (INSTALLER_PW and is_installer(req)):
         return await handler(req)
     if not REMOTE_PW:
         return web.Response(status=403, text="Remote access needs remote_password in config.json")
@@ -220,7 +252,10 @@ async def login(req):
 
 async def ets_tunnel(req):
     """Relay raw KNXnet/IP UDP frames between a remote ETS (via ets_remote.py) and the IP router."""
-    if not REMOTE_PW or not authed(req):
+    if INSTALLER_PW:
+        if req.headers.get("X-Key") != INSTALLER_PW:
+            return web.Response(status=401, text="wrong installer password")
+    elif not REMOTE_PW or not authed(req):
         return web.Response(status=401, text="wrong password")
     gw = (CFG.get("gateway_ip") or "").strip()
     if not gw:
@@ -416,6 +451,8 @@ async def get_project(_req):
 
 
 async def put_project(req):
+    if not is_installer(req):
+        return web.json_response({"ok": False, "error": "installer only"}, status=403)
     data = await req.text()
     json.loads(data)  # validate
     PROJECT_FILE.write_text(data, encoding="utf-8")
@@ -472,6 +509,9 @@ async def main() -> None:
         web.post("/login", login),
         web.get("/ets", ets_tunnel),
         web.get("/api/project", get_project),
+        web.get("/api/role", role),
+        web.post("/api/installer", installer_login),
+        web.post("/api/installer/logout", installer_logout),
         web.put("/api/project", put_project),
         web.get("/ws", ws_handler),
     ])

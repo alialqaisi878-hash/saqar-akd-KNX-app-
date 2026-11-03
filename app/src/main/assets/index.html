@@ -137,6 +137,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .toast{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--sheet);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:60;max-width:calc(100% - 32px)}
 .note{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+[hidden]{display:none!important}
 </style>
 
 </head>
@@ -149,6 +150,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="controls">
       <select class="select" id="projSel" aria-label="المشروع"></select>
       <button class="btn" id="newProj">+ مشروع جديد</button>
+      <button class="btn" id="instBtn" hidden>🔒 الفني</button>
       <div class="seg" role="group" aria-label="الوضع">
         <button id="mEdit" aria-pressed="true">تعديل (الفني)</button>
         <button id="mUse" aria-pressed="false">استخدام (صاحب البيت)</button>
@@ -255,6 +257,7 @@ function sampleProject(){
 const KEY="knx-plan-v1";
 let db=load();
 let mode="edit", tab="dev", gaFilter="";
+let role={installer:true,locked:false};
 const log=[];
 function load(){
  try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.projects&&s.projects.length)return s;}catch(e){}
@@ -262,6 +265,7 @@ function load(){
 }
 let saveT;
 function save(){
+ if(!role.installer)return;
  try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){}
  clearTimeout(saveT);
  saveT=setTimeout(()=>{fetch("api/project",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(db)}).catch(()=>toast("ما انحفظ على الحاسبة، تأكد إن برنامج الربط شغّال"));},400);
@@ -605,13 +609,28 @@ $("#newProj").onclick=()=>{
   $("#pOk").onclick=go;i.onkeydown=e=>{if(e.key==="Enter")go();};
  });
 };
-$("#mEdit").onclick=()=>{mode="edit";render();};
+// ---- installer lock: the home owner only sees "use" mode
+function applyRole(){
+ const inst=role.installer;
+ ["#mEdit","#newProj","#planTools","#tGa"].forEach(q=>{const el=$(q);if(el)el.hidden=!inst;});
+ const seg=$("#mEdit")&&$("#mEdit").parentElement;if(seg)seg.hidden=!inst;
+ const b=$("#instBtn");b.hidden=!role.locked;b.textContent=inst?"🔓 خروج الفني":"🔒";b.title="الفني";
+ if(!inst){mode="use";if(tab==="ga")tab="dev";}
+}
+$("#instBtn").onclick=async()=>{
+ if(role.installer){await fetch("api/installer/logout",{method:"POST"}).catch(()=>{});location.reload();return;}
+ const pw=prompt("باسورد الفني");if(!pw)return;
+ const r=await fetch("api/installer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw})}).catch(()=>null);
+ if(r&&r.ok){location.reload();}else{toast("باسورد الفني غلط");}
+};
+$("#mEdit").onclick=()=>{if(!role.installer)return;mode="edit";render();};
 $("#mUse").onclick=()=>{mode="use";if(tab==="ga")tab="dev";render();};
 $("#tDev").onclick=()=>{tab="dev";renderPane();};
 $("#tGa").onclick=()=>{tab="ga";renderPane();};
 $("#tLog").onclick=()=>{tab="log";renderPane();};
 
-fetch("api/project").then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else{save();}}).catch(()=>{}).finally(()=>{render();setTag();connect();});
+fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;}).catch(()=>{})
+.then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();});
 })();
 </script>
 </body>
