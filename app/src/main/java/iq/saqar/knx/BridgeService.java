@@ -75,6 +75,14 @@ public class BridgeService extends Service {
         if (started) return;
         started = true;
         final Context ctx = getApplicationContext();
+        Thread bk = new Thread(() -> {
+            while (true) {
+                Backup.run(ctx);
+                try { Thread.sleep(120_000); } catch (InterruptedException e) { return; }
+            }
+        }, "knx-backup");
+        bk.setDaemon(true);
+        bk.start();
         new Thread(() -> {
             try {
                 File web = new File(ctx.getFilesDir(), "web");

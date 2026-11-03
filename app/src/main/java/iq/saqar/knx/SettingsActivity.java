@@ -69,7 +69,7 @@ public class SettingsActivity extends Activity {
         l.addView(save);
 
         Button imp = new Button(this);
-        imp.setText("استيراد ملف (config.json أو project.json)");
+        imp.setText("استرجاع نسخة احتياطية (Download/KNXProg) أو استيراد ملف");
         imp.setOnClickListener(v -> {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -140,7 +140,19 @@ public class SettingsActivity extends Activity {
             Uri u = data.getData();
             String txt = Config.readAll(getContentResolver().openInputStream(u));
             JSONObject o = new JSONObject(txt); // must be valid JSON
-            if (o.has("house_id")) {
+            JSONObject restored = Backup.restore(this, o);
+            if (restored != null) {
+                house.setText(restored.optString("house_id"));
+                ip.setText(restored.optString("gateway_ip"));
+                pw.setText(restored.optString("remote_password"));
+                inst.setText(restored.optString("installer_password"));
+                relay.setText(restored.optString("relay_url", Config.DEFAULT_RELAY));
+                tId.setText(restored.optString("tuya_access_id"));
+                tSecret.setText(restored.optString("tuya_access_secret"));
+                tRegion.setText(restored.optString("tuya_region", "eu"));
+                updateLink();
+                toast("انسترجع البيت والخريطة، اضغط حفظ وتشغيل");
+            } else if (o.has("house_id")) {
                 // settings of an existing house (keeps its house_key, so the same link keeps working)
                 o.put("open_browser", false);
                 Config.copy(new java.io.ByteArrayInputStream(o.toString(2).getBytes("UTF-8")), Config.file(this));
