@@ -1,0 +1,34 @@
+name: Build ETS tool (Windows exe)
+
+on:
+  push:
+    branches: [main]
+    paths: ["ets/**", ".github/workflows/ets-exe.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          pip install aiohttp==3.14.5 pyinstaller
+          pyinstaller --onefile --console --name SaqarETS ets/ets_remote.py
+      - name: Publish exe to the exe branch
+        shell: bash
+        run: |
+          mkdir -p /tmp/out && cp dist/SaqarETS.exe /tmp/out/
+          cd /tmp/out
+          git init -q -b exe
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add SaqarETS.exe
+          git commit -q -m "exe from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" exe
