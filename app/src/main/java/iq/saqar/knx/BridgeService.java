@@ -88,6 +88,7 @@ public class BridgeService extends Service {
                 File web = new File(ctx.getFilesDir(), "web");
                 if (!web.exists()) web.mkdirs();
                 Config.copy(ctx.getAssets().open("index.html"), new File(web, "index.html"));
+                Config.copy(ctx.getAssets().open("three.js"), new File(web, "three.js"));
                 if (!Python.isStarted()) Python.start(new AndroidPlatform(ctx));
                 Python py = Python.getInstance();
                 PyObject env = py.getModule("os").get("environ");

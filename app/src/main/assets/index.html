@@ -84,6 +84,16 @@ button{cursor:pointer}
 .editing .dev{border-style:dashed;cursor:grab}
 .dev.dragging{cursor:grabbing;opacity:.85}
 .dev.unbound::after{content:"";position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:var(--danger);border:2px solid var(--sheet)}
+.viewbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.v3d{position:relative;width:100%;height:min(74vh,700px);background:#0b1220;direction:rtl}
+.v3d canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.v3dmsg{position:absolute;inset:0;display:grid;place-items:center;color:#cbd5e1}
+.v3dbar{position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.v3dbar .btn{background:rgba(15,23,42,.78);color:#fff;border-color:rgba(255,255,255,.18);backdrop-filter:blur(6px)}
+.v3s{display:flex;align-items:center;gap:6px;background:rgba(15,23,42,.78);color:#fff;border-radius:8px;padding:4px 10px;font-size:.8rem}
+.v3s input{width:110px}
+.roomh{display:flex;justify-content:space-between;align-items:center;margin:12px 2px 6px;font-weight:600;color:var(--ink)}
+.roomh .btn{padding:3px 10px;font-size:.78rem}
 
 /* side rail */
 .rail{background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-width:0}
@@ -175,7 +185,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 
   <div class="bench">
     <section class="stagewrap">
-      <p class="hint" id="hint"></p>
+      <div class="viewbar"><p class="hint" id="hint" style="margin:0;flex:1"></p>
+        <div class="seg" role="group" aria-label="العرض"><button id="vw2" aria-pressed="true">خريطة 2D</button><button id="vw3" aria-pressed="false">مجسم 3D</button></div></div>
       <div class="stage" id="stage"></div>
       <div class="hint" style="margin:10px 0 0" id="planTools">
         <label class="btn" for="planFile">رفع خريطة (صورة أو PDF)</label>
@@ -421,6 +432,9 @@ function renderTop(){
 function renderStage(){
  const p=P(),st=$("#stage");
  st.classList.toggle("editing",mode==="edit");
+ $("#vw2").setAttribute("aria-pressed",!view3d);$("#vw3").setAttribute("aria-pressed",view3d);
+ if(view3d&&p.plan){st.style.aspectRatio="";st.classList.remove("editing");render3d();return;}
+ if(H3){H3.dispose();H3=null;}
  if(!p.plan){st.innerHTML=`<div class="empty">ما بيه خريطة بعد. ارفع صورة أو PDF للبيت.</div>`;return;}
  st.style.aspectRatio=p.planW+"/"+p.planH;
  st.innerHTML=`<img src="${p.plan}" alt="خريطة ${esc(p.name)}">`+p.devices.map(markerHtml).join("");
@@ -448,8 +462,11 @@ function renderPane(){
  ["dev","ga","sch","log"].forEach(k=>$("#t"+k[0].toUpperCase()+k.slice(1)).setAttribute("aria-selected",tab===k));
  const p=P(),pane=$("#pane");
  if(tab==="dev"){
-  const rows=p.devices.map(d=>{const first=d.type==="tuya"?d.tuyaName:TYPES[d.type].fields.map(f=>d.ga&&d.ga[f[0]]).filter(Boolean)[0];
-   return `<button class="row" data-dev="${d.id}"><span class="ic">${I[d.type]}</span><span class="tx"><div>${esc(d.name)}</div><div>${TYPES[d.type].label} · ${first?`<span class="mono">${esc(first)}</span>`:"<span style='color:var(--danger)'>بدون عنوان</span>"}</div></span><span class="pill${(d.st.on&&d.type!=="scene")?" on":""}">${statusText(d)}</span></button>`;}).join("");
+  const rowOf=d=>{const first=d.type==="tuya"?d.tuyaName:TYPES[d.type].fields.map(f=>d.ga&&d.ga[f[0]]).filter(Boolean)[0];
+   return `<button class="row" data-dev="${d.id}"><span class="ic">${I[d.type]}</span><span class="tx"><div>${esc(d.name)}</div><div>${TYPES[d.type].label} · ${first?`<span class="mono">${esc(first)}</span>`:"<span style='color:var(--danger)'>بدون عنوان</span>"}</div></span><span class="pill${(d.st.on&&d.type!=="scene")?" on":""}">${statusText(d)}</span></button>`;};
+  const rooms=[...new Set(p.devices.map(d=>d.room||""))].sort((a,b)=>!a?1:!b?-1:a.localeCompare(b,"ar"));
+  const rows=rooms.length>1||rooms[0]?rooms.map(r=>{const ds=p.devices.filter(d=>(d.room||"")===r);const on=ds.filter(d=>d.st.on&&["switch","dimmer","tuya","hvac"].includes(d.type)).length;
+   return `<div class="roomh"><span>${esc(r||"بدون غرفة")} <span class="muted" style="font-weight:400">${on?"· "+on+" شغّال":""}</span></span>${on&&mode==="use"?`<button class="btn" data-roomoff="${esc(r)}">إطفاء الغرفة</button>`:""}</div>`+ds.map(rowOf).join("");}).join(""):p.devices.map(rowOf).join("");
   pane.innerHTML=(rows||`<p class="muted">ما بيه أجهزة بعد. ${mode==="edit"?"اضغط على الخريطة حتى تضيف أول جهاز.":""}</p>`)+
    (mode==="edit"?`<p class="note">النقطة الحمرة على الأيقونة تعني إنها ما مربوطة بأي Group Address.</p>`:"");
  }
@@ -478,7 +495,7 @@ function render(){renderTop();renderStage();renderPane();}
 /* ---------- stage interactions ---------- */
 let drag=null;
 $("#stage").addEventListener("pointerdown",e=>{
- const p=P();if(!p.plan)return;
+ const p=P();if(!p.plan||view3d)return;
  const b=e.target.closest(".dev");
  const rect=$("#stage").getBoundingClientRect();
  if(b){
@@ -508,17 +525,142 @@ $("#stage").addEventListener("pointerup",()=>{
 });
 $("#stage").addEventListener("pointercancel",()=>{drag=null;});
 $("#pane").addEventListener("click",e=>{
+ const ro=e.target.closest("[data-roomoff]");
+ if(ro){const room=ro.dataset.roomoff;P().devices.filter(d=>(d.room||"")===room&&d.st.on).forEach(d=>{
+   if(d.type==="tuya"){tuyaSend(d,d.code,false);d.st.on=false;}
+   else if(["switch","dimmer","hvac"].includes(d.type)&&d.ga&&d.ga.cmd){telegram(d.ga.cmd,"1.001",0);d.st.on=false;respond(d.ga.status,"1.001",0);}});
+  refresh();toast("انطفت "+(room||"الأجهزة"));return;}
  const r=e.target.closest("[data-dev]");if(!r)return;const d=P().devices.find(x=>x.id===r.dataset.dev);
  mode==="edit"?editDevice(d):operate(d);
 });
 
 /* ---------- sheets ---------- */
+/* ---------- 3D house view (walls are found automatically in the floor-plan image) ---------- */
+let view3d=false,H3=null,night=false;
+function loadThree(){return new Promise((res,rej)=>{if(window.THREE&&THREE.OrbitControls)return res();const s=document.createElement("script");s.src="three.js";s.onload=res;s.onerror=()=>rej(new Error("three"));document.head.appendChild(s);});}
+function findWalls(img,thr){
+ const W=Math.min(1400,img.naturalWidth),Hh=Math.round(img.naturalHeight*W/img.naturalWidth);
+ const c=document.createElement("canvas");c.width=W;c.height=Hh;const x=c.getContext("2d");x.drawImage(img,0,0,W,Hh);
+ const px=x.getImageData(0,0,W,Hh).data;const N=Math.max(60,Math.min(260,Math.round(W/6)));const cs=W/N;const M=Math.ceil(Hh/cs);
+ const g=new Uint8Array(N*M);const lum=100+thr*1.2;
+ for(let j=0;j<M;j++)for(let i=0;i<N;i++){let dark=0,tot=0;
+  const x0=Math.floor(i*cs),x1=Math.min(W,Math.floor((i+1)*cs)),y0=Math.floor(j*cs),y1=Math.min(Hh,Math.floor((j+1)*cs));
+  for(let y=y0;y<y1;y+=1)for(let xx=x0;xx<x1;xx+=1){const k=(y*W+xx)*4,r=px[k],gg=px[k+1],b=px[k+2];tot++;
+   if(px[k+3]>100&&(r+gg+b)/3<lum&&Math.max(r,gg,b)-Math.min(r,gg,b)<70)dark++;}
+  if(tot&&dark/tot>0.42)g[j*N+i]=1;}
+ // drop small blobs (text, symbols)
+ const seen=new Int32Array(N*M).fill(-1),minSize=Math.max(8,Math.round(N/14));
+ for(let s=0;s<N*M;s++){if(!g[s]||seen[s]>=0)continue;const q=[s],comp=[s];seen[s]=s;
+  while(q.length){const v=q.pop(),i=v%N,j=(v/N)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=N||b>=M)continue;const u=b*N+a;if(g[u]&&seen[u]<0){seen[u]=s;q.push(u);comp.push(u);}}}
+  if(comp.length<minSize)comp.forEach(u=>g[u]=0);}
+ // greedy rectangles
+ const used=new Uint8Array(N*M),rects=[];
+ for(let j=0;j<M;j++)for(let i=0;i<N;i++){const s=j*N+i;if(!g[s]||used[s])continue;
+  let w=1;while(i+w<N&&g[s+w]&&!used[s+w])w++;
+  let h=1;outer:while(j+h<M){for(let k=0;k<w;k++){const u=(j+h)*N+i+k;if(!g[u]||used[u])break outer;}h++;}
+  for(let b=0;b<h;b++)for(let k=0;k<w;k++)used[(j+b)*N+i+k]=1;rects.push([i,j,w,h]);}
+ return {rects,N,M};
+}
+function glowTex(){const c=document.createElement("canvas");c.width=c.height=128;const x=c.getContext("2d");const gr=x.createRadialGradient(64,64,0,64,64,64);
+ gr.addColorStop(0,"rgba(255,255,255,1)");gr.addColorStop(.25,"rgba(255,255,255,.55)");gr.addColorStop(1,"rgba(255,255,255,0)");x.fillStyle=gr;x.fillRect(0,0,128,128);return new THREE.CanvasTexture(c);}
+const GLYPH={switch:"💡",dimmer:"🔆",blind:"▤",hvac:"❄",scene:"★",tuya:"💡"};
+function devColor(d){
+ if(d.type==="hvac")return d.st.on?"#3b82f6":null;
+ if(d.type==="blind")return null;
+ if(!d.st.on||d.type==="scene")return null;
+ if(d.type==="tuya"){const f=tuyaFeat(d);if(f.colour&&f.st.work_mode==="colour"){const c=tuyaColour(f);if(c)return `hsl(${c.h},95%,60%)`;}
+  if(f.temp){const k=f.st[f.temp]/f.tempMax;return `hsl(${36-k*(36-210)},${95-k*45}%,${62+k*20}%)`;}}
+ return "#ffb43c";
+}
+function iconTex(d){
+ const c=document.createElement("canvas");c.width=256;c.height=200;const x=c.getContext("2d");
+ const col=devColor(d);x.beginPath();x.arc(128,64,52,0,7);x.fillStyle=col||"rgba(30,41,59,.92)";x.fill();
+ x.lineWidth=6;x.strokeStyle=col?"#fff":"rgba(255,255,255,.75)";x.stroke();
+ x.font="56px sans-serif";x.textAlign="center";x.textBaseline="middle";x.fillStyle=col?"#2a1a00":"#fff";x.fillText(GLYPH[d.type]||"•",128,68);
+ let sub="";if(d.type==="dimmer"&&d.st.on)sub=(d.st.level||0)+"%";if(d.type==="blind")sub=(d.st.pos||0)+"%";if(d.type==="hvac")sub=d.st.on?d.st.setpoint+"°":(d.st.temp!=null?d.st.temp+"°":"");
+ if(d.type==="tuya"&&d.st.on){const pw=tuyaFeat(d).power;sub=pw!=null?Math.round(pw)+"W":d.dimCode?(d.st.level||0)+"%":"";}
+ x.font="bold 30px sans-serif";const label=d.name+(sub?" · "+sub:"");const tw=Math.min(250,x.measureText(label).width+24);
+ x.fillStyle="rgba(15,23,42,.82)";x.beginPath();x.roundRect?x.roundRect(128-tw/2,128,tw,44,12):x.rect(128-tw/2,128,tw,44);x.fill();
+ x.fillStyle="#fff";x.direction="rtl";x.fillText(label,128,151,240);
+ const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;
+}
+async function build3d(){
+ const p=P(),st=$("#stage");
+ st.innerHTML=`<div class="v3d"><div class="v3dmsg">جاري بناء المجسم…</div></div>`;
+ try{await loadThree();}catch(e){$(".v3dmsg").textContent="ما كدرت أحمّل محرك العرض المجسم";return;}
+ const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=p.plan;}).catch(()=>null);
+ if(!img){$(".v3dmsg").textContent="ما بيه خريطة";return;}
+ p.v3d=p.v3d||{thr:50,h:1.6};
+ const wrap=$(".v3d");wrap.innerHTML=`<canvas></canvas>
+  <div class="v3dbar"><button class="btn" id="v3Night">${night?"☀️ نهار":"🌙 ليل"}</button><button class="btn" id="v3Top">⬆ من فوك</button><button class="btn" id="v3Reset">↺</button>
+  ${role.installer&&mode==="edit"?`<label class="v3s">الجدران<input type="range" id="v3Thr" min="0" max="100" value="${p.v3d.thr}"></label><label class="v3s">الارتفاع<input type="range" id="v3H" min="4" max="30" value="${Math.round(p.v3d.h*10)}"></label>`:""}</div>`;
+ const canvas=wrap.querySelector("canvas");
+ const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+ renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));renderer.outputEncoding=THREE.sRGBEncoding;
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ const scene=new THREE.Scene();
+ const Wd=20,Dp=20*img.naturalHeight/img.naturalWidth;
+ const camera=new THREE.PerspectiveCamera(40,1,0.1,400);
+ const controls=new THREE.OrbitControls(camera,canvas);controls.enableDamping=true;controls.maxPolarAngle=1.42;controls.minDistance=4;controls.maxDistance=70;controls.target.set(0,0,0);controls.screenSpacePanning=false;
+ const home=()=>{camera.position.set(0,Math.max(Wd,Dp)*1.0,Dp*0.6+Wd*0.55);controls.target.set(0,0,0);controls.update();};home();
+ const hemi=new THREE.HemisphereLight(0xffffff,0x8a8f99,0.9);scene.add(hemi);
+ const sun=new THREE.DirectionalLight(0xffffff,0.85);sun.position.set(-12,24,10);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);
+ const sc=sun.shadow.camera;sc.left=-Wd*.7;sc.right=Wd*.7;sc.top=Dp*.7+4;sc.bottom=-Dp*.7-4;sc.far=80;sun.shadow.bias=-0.0008;scene.add(sun);
+ const tex=new THREE.Texture(img);tex.encoding=THREE.sRGBEncoding;tex.anisotropy=renderer.capabilities.getMaxAnisotropy();tex.needsUpdate=true;
+ const floor=new THREE.Mesh(new THREE.PlaneGeometry(Wd,Dp),new THREE.MeshStandardMaterial({map:tex,roughness:.95}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+ const base=new THREE.Mesh(new THREE.BoxGeometry(Wd+0.6,0.3,Dp+0.6),new THREE.MeshStandardMaterial({color:0x1e293b,roughness:.8}));base.position.y=-0.16;base.receiveShadow=true;scene.add(base);
+ const wallsG=new THREE.Group();scene.add(wallsG);
+ const wallMat=[0,1,2,3,4,5].map(k=>new THREE.MeshStandardMaterial({color:k===2?0x334155:0xe7e2d9,roughness:.85}));
+ const makeWalls=()=>{wallsG.clear();const {rects,N}=findWalls(img,p.v3d.thr);const u=Wd/N;
+  rects.forEach(([i,j,w,h])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w*u,p.v3d.h,h*u),wallMat);m.position.set(-Wd/2+(i+w/2)*u,p.v3d.h/2,-Dp/2+(j+h/2)*u);m.castShadow=true;m.receiveShadow=true;wallsG.add(m);});};
+ makeWalls();
+ const gtex=glowTex();const devG=new THREE.Group();scene.add(devG);const pick=[];
+ const disp=o=>o.traverse(n=>{if(n.geometry)n.geometry.dispose();if(n.material){if(n.material.map&&n.material.map!==gtex)n.material.map.dispose();n.material.dispose();}});
+ const makeDevs=()=>{disp(devG);devG.clear();pick.length=0;let lights=0;
+  P().devices.forEach(d=>{const x=-Wd/2+d.x/100*Wd,z=-Dp/2+d.y/100*Dp;const col=devColor(d);
+   const g=new THREE.Group();g.position.set(x,0,z);
+   if(col){const lvl=d.type==="dimmer"||(d.type==="tuya"&&d.dimCode)?Math.max(.25,(d.st.level||0)/100):1;
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:gtex,color:new THREE.Color(col),transparent:true,opacity:(night?.95:.6)*lvl,blending:THREE.AdditiveBlending,depthWrite:false}));
+    glow.scale.set(5.5*lvl+1.5,5.5*lvl+1.5,1);glow.position.y=0.05;glow.center.set(.5,.5);
+    const flat=new THREE.Mesh(new THREE.CircleGeometry(2.6*lvl+.8,40),new THREE.MeshBasicMaterial({map:gtex,color:new THREE.Color(col),transparent:true,opacity:(night?.9:.55)*lvl,blending:THREE.AdditiveBlending,depthWrite:false}));
+    flat.rotation.x=-Math.PI/2;flat.position.y=0.03;g.add(flat);
+    if(night&&lights<8){lights++;const pl=new THREE.PointLight(new THREE.Color(col),1.1*lvl,7,2);pl.position.y=p.v3d.h*0.9;g.add(pl);}}
+   const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,p.v3d.h+0.4,6),new THREE.MeshBasicMaterial({color:col?new THREE.Color(col):0x94a3b8,transparent:true,opacity:.7}));pole.position.y=(p.v3d.h+0.4)/2;g.add(pole);
+   const icon=new THREE.Sprite(new THREE.SpriteMaterial({map:iconTex(d),depthTest:false}));icon.scale.set(2.2,1.72,1);icon.center.set(.5,.36);icon.position.y=p.v3d.h+0.75;icon.renderOrder=10;icon.userData.dev=d.id;g.add(icon);pick.push(icon);
+   devG.add(g);});};
+ makeDevs();
+ const setNight=()=>{scene.background=new THREE.Color(night?0x070b14:0xdfe5ec);hemi.intensity=night?0.12:0.55;sun.intensity=night?0.05:0.75;renderer.toneMappingExposure=1;makeDevs();};setNight();
+ const resize=()=>{const w=wrap.clientWidth,h=wrap.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();};
+ const ro=new ResizeObserver(resize);ro.observe(wrap);resize();
+ let alive=true,raf=0;const loop=()=>{if(!alive)return;controls.update();renderer.render(scene,camera);raf=requestAnimationFrame(loop);};loop();
+ // tap a device
+ const ray=new THREE.Raycaster(),v=new THREE.Vector2();let down=null;
+ canvas.addEventListener("pointerdown",e=>{down=[e.clientX,e.clientY];});
+ canvas.addEventListener("pointerup",e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;down=null;
+  const r=canvas.getBoundingClientRect();v.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(v,camera);
+  const hit=ray.intersectObjects(pick)[0];if(!hit)return;const d=P().devices.find(x=>x.id===hit.object.userData.dev);if(d)mode==="edit"?editDevice(d):operate(d);});
+ $("#v3Night").onclick=()=>{night=!night;$("#v3Night").textContent=night?"☀️ نهار":"🌙 ليل";setNight();};
+ $("#v3Top").onclick=()=>{camera.position.set(0,Math.max(Wd,Dp)*1.25,0.01);controls.target.set(0,0,0);};
+ $("#v3Reset").onclick=home;
+ const thr=$("#v3Thr");if(thr)thr.onchange=()=>{p.v3d.thr=+thr.value;makeWalls();save();};
+ const hh=$("#v3H");if(hh)hh.onchange=()=>{p.v3d.h=+hh.value/10;makeWalls();makeDevs();save();};
+ H3={plan:p.plan,proj:p.id,sync:makeDevs,dispose(){alive=false;cancelAnimationFrame(raf);ro.disconnect();renderer.dispose();}};
+}
+function render3d(){
+ const p=P();
+ if(H3&&H3.proj===p.id&&H3.plan===p.plan&&$(".v3d canvas")){H3.sync();return;}
+ if(H3){H3.dispose();H3=null;}
+ build3d();
+}
+
 /* ---------- schedules (run by the bridge, also when no page is open) ---------- */
-let schedules=null;
+let schedules=null,holiday={enabled:false,devices:[]},sunT={};
 const DAYS=["أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"];
 const schedulable=d=>["switch","dimmer","tuya","hvac","blind","scene"].includes(d.type);
-async function loadSchedules(){try{const r=await fetch("api/schedules");schedules=r.ok?(await r.json()).schedules:[];}catch(e){schedules=[];}}
-function saveSchedules(){fetch("api/schedules",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({schedules})}).then(r=>{if(!r.ok)throw 0;}).catch(()=>toast("ما انحفظت المواعيد، تأكد إن الجسر شغّال"));}
+async function loadSchedules(){try{const r=await fetch("api/schedules");const j=r.ok?await r.json():{};schedules=j.schedules||[];holiday=Object.assign({enabled:false,devices:[]},j.holiday||{});sunT=j.sun||{};}catch(e){schedules=[];}}
+function whenText(s){const off=+s.offset||0,o=off?(off>0?" + ":" − ")+Math.abs(off)+" د":"";
+ if(s.at==="sunset")return "🌇 الغروب"+o+(sunT.sunset?` (${sunT.sunset})`:"");if(s.at==="sunrise")return "🌅 الشروق"+o+(sunT.sunrise?` (${sunT.sunrise})`:"");return s.time;}
+function saveSchedules(){fetch("api/schedules",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({schedules,holiday})}).then(r=>{if(!r.ok)throw 0;}).catch(()=>toast("ما انحفظت المواعيد، تأكد إن الجسر شغّال"));}
 function actLabel(s){const ds=(s.devices||[]).map(id=>P().devices.find(x=>x.id===id)).filter(Boolean);
  const allScene=ds.length&&ds.every(x=>x.type==="scene");return allScene?"تشغيل":s.on?"تشغيل":"إطفاء";}
 function renderSchedules(pane){
@@ -527,33 +669,44 @@ function renderSchedules(pane){
  pane.innerHTML=`<p class="muted">المواعيد تشتغل من التابليت بالبيت، حتى لو كل التلفونات مسدودة.</p>`+
   (schedules.length?schedules.map((s,i)=>{const names=(s.devices||[]).map(id=>(p.devices.find(x=>x.id===id)||{}).name).filter(Boolean);
    const days=(s.days&&s.days.length&&s.days.length<7)?s.days.map(x=>DAYS[x]).join("، "):"كل يوم";
-   return `<div class="sch"><span class="tm">${esc(s.time)}</span><span class="tx"><b style="color:var(--ink)">${esc(s.name||actLabel(s))}</b><br>${actLabel(s)}: ${esc(names.join("، ")||"—")}<br>${days}</span>
+   return `<div class="sch"><span class="tm" style="${s.at&&s.at!=="time"?"font-size:.9rem":""}">${esc(whenText(s))}</span><span class="tx"><b style="color:var(--ink)">${esc(s.name||actLabel(s))}</b><br>${actLabel(s)}: ${esc(names.join("، ")||"—")}<br>${days}</span>
    <label title="مفعّل"><input type="checkbox" data-en="${i}" ${s.enabled!==false?"checked":""}></label><button class="btn" data-ed="${i}">تعديل</button></div>`;}).join(""):`<p class="muted">ما بيه مواعيد بعد.</p>`)+
-  `<button class="btn primary" id="addSch">+ موعد جديد</button>`;
+  `<button class="btn primary" id="addSch">+ موعد جديد</button>`+
+  `<div class="sch" style="margin-top:14px;flex-wrap:wrap"><span class="tx"><b style="color:var(--ink)">✈️ وضع السفر</b><br>لمن تكونون برة البيت، الإنارة المختارة تشتغل وتنطفي بشكل عشوائي من الغروب لحد نص الليل، كأنه أكو ناس بالبيت.</span>
+   <label><input type="checkbox" id="holEn" ${holiday.enabled?"checked":""}> مفعّل</label><button class="btn" id="holEd">اختيار الإنارة (${holiday.devices.length})</button></div>`;
  pane.querySelectorAll("[data-en]").forEach(c=>c.onchange=()=>{schedules[+c.dataset.en].enabled=c.checked;saveSchedules();});
  pane.querySelectorAll("[data-ed]").forEach(b=>b.onclick=()=>editSchedule(+b.dataset.ed));
  $("#addSch").onclick=()=>editSchedule(-1);
+ $("#holEn").onchange=()=>{if($("#holEn").checked&&!holiday.devices.length){$("#holEn").checked=false;toast("اختار الإنارة أول");return;}holiday.enabled=$("#holEn").checked;saveSchedules();toast(holiday.enabled?"وضع السفر شغّال":"انطفى وضع السفر");};
+ $("#holEd").onclick=()=>{const devs=P().devices.filter(d=>["switch","dimmer","tuya"].includes(d.type));
+  sheet(`<header><h2>إنارة وضع السفر</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+   <div class="devpick" style="max-height:50vh">${devs.map(d=>`<label><input type="checkbox" data-hv="${d.id}" ${holiday.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span></label>`).join("")}</div>
+   <div class="actions"><span></span><button class="btn primary" id="holOk">حفظ</button></div>`,()=>{
+   $("#holOk").onclick=()=>{holiday.devices=[...document.querySelectorAll("[data-hv]:checked")].map(c=>c.dataset.hv);if(!holiday.devices.length)holiday.enabled=false;saveSchedules();close();renderPane();};});};
 }
 function editSchedule(i){
  const s=i>=0?JSON.parse(JSON.stringify(schedules[i])):{id:uid(),name:"",time:"19:00",on:true,days:[0,1,2,3,4,5,6],devices:[],enabled:true};
  const devs=P().devices.filter(schedulable);
  sheet(`<header><h2>${i>=0?"تعديل الموعد":"موعد جديد"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
   <div class="grid2"><div class="field"><label for="sName">الاسم (اختياري)</label><input id="sName" value="${esc(s.name)}" placeholder="مثلاً: إنارة المسا"></div>
-  <div class="field"><label for="sTime">الوقت</label><input id="sTime" type="time" value="${esc(s.time)}"></div></div>
+  <div class="field"><label for="sAt">متى</label><select id="sAt"><option value="time">بوقت محدد</option><option value="sunset" ${s.at==="sunset"?"selected":""}>🌇 وقت الغروب${sunT.sunset?" (اليوم "+sunT.sunset+")":""}</option><option value="sunrise" ${s.at==="sunrise"?"selected":""}>🌅 وقت الشروق${sunT.sunrise?" (اليوم "+sunT.sunrise+")":""}</option></select></div></div>
+  <div class="grid2"><div class="field" id="fTime"><label for="sTime">الوقت</label><input id="sTime" type="time" value="${esc(s.time)}"></div>
+  <div class="field" id="fOff"><label for="sOffs">قبل/بعد (دقايق)</label><input id="sOffs" type="number" step="5" value="${+s.offset||0}" placeholder="مثلاً -15 يعني قبل ربع ساعة"></div></div>
   <div class="field"><label>شنو يسوي</label><div class="big"><button id="sOn" class="${s.on?"active":""}">تشغيل</button><button id="sOff" class="${!s.on?"active":""}">إطفاء</button></div></div>
   <div class="field"><label>الأيام</label><div class="days">${DAYS.map((n,k)=>`<label><input type="checkbox" data-day="${k}" ${s.days.includes(k)?"checked":""}>${n}</label>`).join("")}</div></div>
   <div class="field"><label>الأجهزة</label><div class="devpick">${devs.map(d=>`<label><input type="checkbox" data-dv="${d.id}" ${s.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">· ${TYPES[d.type].label}</span></label>`).join("")||"<span class='muted'>ما بيه أجهزة</span>"}</div></div>
   <p class="note">الستارة: تشغيل = تنزل، إطفاء = تصعد. السين يشتغل بس ويا "تشغيل".</p>
   <div class="actions">${i>=0?`<button class="btn danger" id="sDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="sOk">حفظ</button></div></div>`,()=>{
+  const atSync=()=>{const a=$("#sAt").value;$("#fTime").hidden=a!=="time";$("#fOff").hidden=a==="time";};$("#sAt").onchange=atSync;atSync();
   $("#sOn").onclick=()=>{s.on=true;$("#sOn").classList.add("active");$("#sOff").classList.remove("active");};
   $("#sOff").onclick=()=>{s.on=false;$("#sOff").classList.add("active");$("#sOn").classList.remove("active");};
-  $("#sOk").onclick=()=>{s.name=$("#sName").value.trim();s.time=$("#sTime").value||"19:00";
+  $("#sOk").onclick=()=>{s.name=$("#sName").value.trim();s.time=$("#sTime").value||"19:00";s.at=$("#sAt").value;s.offset=Math.max(-180,Math.min(180,+$("#sOffs").value||0));
    s.days=[...document.querySelectorAll("[data-day]:checked")].map(c=>+c.dataset.day);
    s.devices=[...document.querySelectorAll("[data-dv]:checked")].map(c=>c.dataset.dv);
    if(!s.devices.length){toast("اختار جهاز واحد على الأقل");return;}
    if(!s.days.length){toast("اختار يوم واحد على الأقل");return;}
    if(i>=0)schedules[i]=s;else schedules.push(s);
-   schedules.sort((a,b)=>a.time.localeCompare(b.time));saveSchedules();close();renderPane();toast("انحفظ الموعد");};
+   const key=x=>x.at==="sunrise"?(sunT.sunrise||"06:00"):x.at==="sunset"?(sunT.sunset||"17:00"):x.time;schedules.sort((a,b)=>key(a).localeCompare(key(b)));saveSchedules();close();renderPane();toast("انحفظ الموعد");};
   const del=$("#sDel");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية للحذف";return;}
    schedules.splice(i,1);saveSchedules();close();renderPane();toast("انحذف الموعد");};
  });
@@ -586,6 +739,7 @@ function editDevice(d,pos){
   const T=TYPES[draft.type];
   sheet(`<header><h2>${isNew?"جهاز جديد":"تعديل الجهاز"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
   <div class="field"><label for="fName">الاسم اللي يشوفه صاحب البيت</label><input id="fName" value="${esc(draft.name)}" placeholder="مثلاً: سقف الصالة"></div>
+  <div class="field"><label for="fRoom">الغرفة</label><input id="fRoom" list="roomDl" value="${esc(draft.room||"")}" placeholder="مثلاً: الصالة"><datalist id="roomDl">${[...new Set(P().devices.map(x=>x.room).filter(Boolean))].map(r=>`<option value="${esc(r)}">`).join("")}</datalist></div>
   <div class="field"><label>النوع</label><div class="types">${Object.keys(TYPES).map(k=>`<button data-type="${k}" aria-pressed="${draft.type===k}">${I[k]}${TYPES[k].label}</button>`).join("")}</div></div>
   <div class="grid2">${T.fields.map(f=>`<div class="field"><label for="g_${f[0]}">${f[1]} <span class="mono">DPT ${f[2]}</span></label><input id="g_${f[0]}" class="mono" list="gaDl" value="${esc(draft.ga[f[0]]||"")}" placeholder="1/1/1" inputmode="numeric"><small class="muted" id="n_${f[0]}">${esc(gaName(draft.ga[f[0]]))}</small></div>`).join("")}
   ${draft.type==="scene"?`<div class="field"><label for="fScene">رقم السين</label><input id="fScene" type="number" min="1" max="64" value="${draft.sceneNo||1}"></div>`:""}</div>
@@ -595,7 +749,7 @@ function editDevice(d,pos){
   ${gaOptions()}
   <div class="actions">${isNew?"<span></span>":`<button class="btn danger" id="del">حذف</button>`}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="ok">حفظ</button></div></div>`,
   s=>{
-   const grab=()=>{draft.name=$("#fName").value.trim();
+   const grab=()=>{draft.name=$("#fName").value.trim();draft.room=$("#fRoom").value.trim();
     if(draft.type==="tuya"&&$("#tySel")&&$("#tySel").dataset.ready){const id=$("#tySel").value;const x=(tuyaList||[]).find(y=>y.id===id);draft.tuyaId=id||"";draft.tuyaName=x?x.name:"";draft.code=$("#tCode").value;const dc=$("#tDim").value;if(dc!==draft.dimCode){draft.dimCode=dc;const r=DIM_RANGE[dc]||[10,1000];draft.dimMin=r[0];draft.dimMax=r[1];}}T.fields.forEach(f=>{const v=($("#g_"+f[0]).value.match(/\d+\/\d+\/\d+/)||[""])[0];draft.ga[f[0]]=v;});const sc=$("#fScene");if(sc)draft.sceneNo=Math.max(1,Math.min(64,+sc.value||1));};
    s.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{grab();draft.type=b.dataset.type;draw();});
    T.fields.forEach(f=>{const inp=$("#g_"+f[0]);inp.oninput=()=>{const v=(inp.value.match(/\d+\/\d+\/\d+/)||[""])[0];$("#n_"+f[0]).textContent=gaName(v)||(v?"عنوان مو موجود بملف ETS":"");};});
@@ -800,6 +954,9 @@ $("#tDev").onclick=()=>{tab="dev";renderPane();};
 $("#tGa").onclick=()=>{tab="ga";renderPane();};
 $("#tLog").onclick=()=>{tab="log";renderPane();};
 $("#tSch").onclick=()=>{tab="sch";renderPane();};
+$("#vw2").onclick=()=>{view3d=false;try{localStorage.setItem("knx-view","2d");}catch(e){}renderStage();};
+$("#vw3").onclick=()=>{if(!P().plan){toast("ارفع خريطة أول");return;}view3d=true;try{localStorage.setItem("knx-view","3d");}catch(e){}renderStage();};
+try{view3d=localStorage.getItem("knx-view")==="3d";}catch(e){}
 
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;}).catch(()=>{})
 .then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();});

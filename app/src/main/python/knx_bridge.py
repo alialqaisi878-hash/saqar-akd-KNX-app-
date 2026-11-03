@@ -131,22 +131,64 @@ async def tuya_send(dev_id: str, code, value=None) -> None:
 SCHED_FILE = DATA / "schedules.json"
 
 
-def load_schedules() -> list:
+LAT = float(CFG.get("latitude", 33.3152))   # Baghdad by default
+LON = float(CFG.get("longitude", 44.3661))
+
+
+def load_sched_file() -> dict:
     try:
-        return json.loads(SCHED_FILE.read_text(encoding="utf-8")).get("schedules", [])
+        return json.loads(SCHED_FILE.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
-        return []
+        return {}
+
+
+def load_schedules() -> list:
+    return load_sched_file().get("schedules", [])
+
+
+def sun_times(day=None) -> dict:
+    """Local sunrise / sunset (NOAA approximation, about a minute accurate)."""
+    import datetime
+    import math
+    day = day or datetime.date.today()
+    g = 2 * math.pi / 365 * (day.timetuple().tm_yday - 1)
+    eqt = 229.18 * (0.000075 + 0.001868 * math.cos(g) - 0.032077 * math.sin(g)
+                    - 0.014615 * math.cos(2 * g) - 0.040849 * math.sin(2 * g))
+    dec = (0.006918 - 0.399912 * math.cos(g) + 0.070257 * math.sin(g) - 0.006758 * math.cos(2 * g)
+           + 0.000907 * math.sin(2 * g) - 0.002697 * math.cos(3 * g) + 0.00148 * math.sin(3 * g))
+    lat = math.radians(LAT)
+    c = math.cos(math.radians(90.833)) / (math.cos(lat) * math.cos(dec)) - math.tan(lat) * math.tan(dec)
+    ha = math.degrees(math.acos(max(-1.0, min(1.0, c))))
+    mid = datetime.datetime(day.year, day.month, day.day, tzinfo=datetime.timezone.utc)
+    rise = (mid + datetime.timedelta(minutes=720 - 4 * (LON + ha) - eqt)).astimezone()
+    sset = (mid + datetime.timedelta(minutes=720 - 4 * (LON - ha) - eqt)).astimezone()
+    return {"sunrise": rise.replace(tzinfo=None), "sunset": sset.replace(tzinfo=None)}
+
+
+def schedule_hm(s: dict, sun: dict) -> str:
+    import datetime
+    at = s.get("at", "time")
+    if at in ("sunrise", "sunset"):
+        return (sun[at] + datetime.timedelta(minutes=int(s.get("offset") or 0))).strftime("%H:%M")
+    return s.get("time", "")
 
 
 async def get_schedules(_req):
-    return web.json_response({"schedules": load_schedules()})
+    f = load_sched_file()
+    sun = sun_times()
+    return web.json_response({"schedules": f.get("schedules", []), "holiday": f.get("holiday", {}),
+                              "sun": {k: v.strftime("%H:%M") for k, v in sun.items()}})
 
 
 async def put_schedules(req):
     data = await req.json()
     if not isinstance(data.get("schedules"), list):
         return web.json_response({"ok": False}, status=400)
-    SCHED_FILE.write_text(json.dumps({"schedules": data["schedules"]}, ensure_ascii=False), encoding="utf-8")
+    f = load_sched_file()
+    f["schedules"] = data["schedules"]
+    if isinstance(data.get("holiday"), dict):
+        f["holiday"] = data["holiday"]
+    SCHED_FILE.write_text(json.dumps(f, ensure_ascii=False), encoding="utf-8")
     return web.json_response({"ok": True})
 
 
@@ -179,17 +221,54 @@ async def run_action(dev: dict, on: bool) -> None:
         send_write(ga["scene"], "17.001", int(dev.get("sceneNo") or 1))
 
 
+async def holiday_step(now, sun: dict, state: dict) -> None:
+    """Presence simulation: while away, random lights go on and off in the evening like someone is home."""
+    import datetime
+    import random
+    h = load_sched_file().get("holiday") or {}
+    devs = [d for d in (find_device(i) for i in h.get("devices", [])) if d]
+    if not h.get("enabled") or not devs:
+        state.clear()
+        return
+    end = now.replace(hour=23, minute=random.Random(now.toordinal()).randint(10, 50), second=0)
+    start = sun["sunset"] + datetime.timedelta(minutes=10)
+    if start <= now < end:
+        if now >= state.get("next", now):
+            d = random.choice(devs)
+            on = not state.setdefault("on", {}).get(d["id"], False)
+            state["on"][d["id"]] = on
+            state["next"] = now + datetime.timedelta(minutes=random.randint(12, 45))
+            try:
+                await run_action(d, on)
+                log.info("holiday mode: %s -> %s", d.get("name"), on)
+            except Exception as err:  # noqa: BLE001
+                log.warning("holiday mode: %s", err)
+    elif state.get("on"):
+        for d in devs:
+            try:
+                await run_action(d, False)
+            except Exception:  # noqa: BLE001
+                pass
+        state.clear()
+
+
 async def schedule_loop() -> None:
     import datetime
     done = ""
+    hol: dict = {}
     while True:
         now = datetime.datetime.now()
         key = now.strftime("%Y-%m-%d %H:%M")
         if key != done:
             done = key
+            sun = sun_times()
+            try:
+                await holiday_step(now, sun, hol)
+            except Exception as err:  # noqa: BLE001
+                log.warning("holiday: %s", err)
             hm, wd = now.strftime("%H:%M"), (now.weekday() + 1) % 7  # 0 = Sunday
             for s in load_schedules():
-                if not s.get("enabled", True) or s.get("time") != hm:
+                if not s.get("enabled", True) or schedule_hm(s, sun) != hm:
                     continue
                 days = s.get("days") or [0, 1, 2, 3, 4, 5, 6]
                 if wd not in days:
@@ -667,6 +746,11 @@ def broadcast(msg: dict) -> None:
         asyncio.ensure_future(ws.send_str(data))
 
 
+async def three_js(_req):
+    return web.FileResponse(Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / "three.js",
+                            headers={"Cache-Control": "max-age=86400"})
+
+
 async def index(_req):
     return web.FileResponse(Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / "index.html")
 
@@ -758,6 +842,7 @@ async def main() -> None:
         web.get("/api/tuya/devices", tuya_devices),
         web.get("/api/tuya/spec", tuya_spec),
         web.get("/api/schedules", get_schedules),
+        web.get("/three.js", three_js),
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
         web.post("/api/installer", installer_login),
