@@ -39,13 +39,17 @@ final class Config {
         return o.optString("house_id").length() > 0 && o.optString("gateway_ip").length() > 0;
     }
 
-    static void save(Context c, String houseId, String ip, String pw, String instPw, String relay) throws Exception {
+    static void save(Context c, String houseId, String ip, String pw, String instPw, String relay,
+                     String tuyaId, String tuyaSecret, String tuyaRegion) throws Exception {
         JSONObject o = load(c); // keeps house_key and anything else already there
         o.put("house_id", houseId);
         o.put("gateway_ip", ip);
         o.put("remote_password", pw);
         o.put("installer_password", instPw);
         o.put("relay_url", relay);
+        o.put("tuya_access_id", tuyaId);
+        o.put("tuya_access_secret", tuyaSecret);
+        o.put("tuya_region", tuyaRegion.isEmpty() ? "eu" : tuyaRegion);
         if (!o.has("connection")) o.put("connection", "auto");
         if (!o.has("keyring_file")) o.put("keyring_file", "");
         if (!o.has("keyring_password")) o.put("keyring_password", "");

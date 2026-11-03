@@ -32,7 +32,7 @@ import java.net.URL;
 /** KNX Prog: the bridge's own screen. Shows whether the house is connected; settings need the installer password. */
 public class MainActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
-    private TextView knx, relay, link, house;
+    private TextView knx, relay, tuya, link, house;
     private String linkText = "";
     private final Runnable poll = this::refresh;
 
@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
         l.addView(house);
         knx = row(l, "الـ IP Router");
         relay = row(l, "سيرفر الشركة");
+        tuya = row(l, "تويا");
         link = text("", 15, "#7dd3fc");
         link.setTextDirection(View.TEXT_DIRECTION_LTR);
         link.setPadding(0, 24, 0, 8);
@@ -105,6 +106,7 @@ public class MainActivity extends Activity {
             house.setText("جاري تشغيل الجسر...");
             set(knx, "...", "#fbbf24");
             set(relay, "...", "#fbbf24");
+            set(tuya, "...", "#fbbf24");
             return;
         }
         house.setText("البيت: " + s.optString("house") + "   ·   الراوتر: " + s.optString("gateway"));
@@ -116,6 +118,12 @@ public class MainActivity extends Activity {
         String rt = "connected".equals(rs) ? "متصل ✓" : "refused".equals(rs) ? "مرفوض: اسم البيت مستخدم" :
                 "error".equals(rs) ? "ما يوصل (تأكد من النت)" : "جاري الاتصال...";
         set(relay, rt, "connected".equals(rs) ? "#4ade80" : "connecting".equals(rs) || "off".equals(rs) ? "#fbbf24" : "#f87171");
+        JSONObject t = s.optJSONObject("tuya");
+        String ts = t != null ? t.optString("state") : "off";
+        String td = t != null ? t.optString("detail") : "";
+        set(tuya, "connected".equals(ts) ? "متصل ✓ " + td.replace(" devices", " جهاز") : "off".equals(ts) ? "غير مفعّل" :
+                "error".equals(ts) ? "خطأ: " + td : "جاري الاتصال...",
+                "connected".equals(ts) ? "#4ade80" : "error".equals(ts) ? "#f87171" : "#94a3b8");
         linkText = s.optString("link").replace("https://srv2056159.hstgr.cloud/knx/h/", Config.PUBLIC_BASE);
         link.setText(linkText);
     }

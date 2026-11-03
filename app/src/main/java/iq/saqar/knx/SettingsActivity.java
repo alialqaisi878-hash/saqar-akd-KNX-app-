@@ -22,7 +22,7 @@ import java.io.File;
 /** First-run / installer screen: house name, IP router address, password. */
 public class SettingsActivity extends Activity {
     private static final int PICK_PROJECT = 9;
-    private EditText house, ip, pw, inst, relay;
+    private EditText house, ip, pw, inst, relay, tId, tSecret, tRegion;
     private TextView link;
 
     @Override protected void onCreate(Bundle b) {
@@ -48,6 +48,14 @@ public class SettingsActivity extends Activity {
         pw = field(l, "باسورد الزبون للرابط من برة البيت", c.optString("remote_password"), false);
         inst = field(l, "باسورد الفني (للتعديل وبرمجة ETS، لا تنطيه للزبون)", c.optString("installer_password"), false);
         relay = field(l, "سيرفر الشركة (لا تغيّره)", c.optString("relay_url", Config.DEFAULT_RELAY), false);
+
+        TextView th = text("أجهزة تويا (اختياري)", 19);
+        th.setPadding(0, 40, 0, 4);
+        l.addView(th);
+        l.addView(text("من platform.tuya.com: المشروع ← Overview. اتركهن فارغات إذا البيت ما بيه تويا.", 13));
+        tId = field(l, "Access ID / Client ID", c.optString("tuya_access_id"), false);
+        tSecret = field(l, "Access Secret / Client Secret", c.optString("tuya_access_secret"), true);
+        tRegion = field(l, "الداتاسنتر (eu لأوروبا)", c.optString("tuya_region", "eu"), false);
 
         link = text("", 15);
         link.setTextColor(Color.parseColor("#7dd3fc"));
@@ -92,7 +100,7 @@ public class SettingsActivity extends Activity {
         e.setText(value);
         e.setTextColor(Color.WHITE);
         e.setSingleLine(true);
-        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        e.setInputType(InputType.TYPE_CLASS_TEXT | (secret ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_URI));
         e.setTextDirection(View.TEXT_DIRECTION_LTR);
         l.addView(e);
         return e;
@@ -116,7 +124,8 @@ public class SettingsActivity extends Activity {
         if (ins.equals(p)) { toast("باسورد الفني لازم يختلف عن باسورد الزبون"); return; }
         if (r.isEmpty()) r = Config.DEFAULT_RELAY;
         try {
-            Config.save(this, h, i, p, ins, r);
+            Config.save(this, h, i, p, ins, r, tId.getText().toString().trim(),
+                    tSecret.getText().toString().trim(), tRegion.getText().toString().trim().toLowerCase());
         } catch (Exception e) {
             toast("ما انحفظ: " + e.getMessage());
             return;
@@ -140,6 +149,9 @@ public class SettingsActivity extends Activity {
                 pw.setText(o.optString("remote_password"));
                 inst.setText(o.optString("installer_password"));
                 relay.setText(o.optString("relay_url", Config.DEFAULT_RELAY));
+                tId.setText(o.optString("tuya_access_id"));
+                tSecret.setText(o.optString("tuya_access_secret"));
+                tRegion.setText(o.optString("tuya_region", "eu"));
                 updateLink();
                 toast("تم استيراد إعدادات البيت، اضغط حفظ وتشغيل");
             } else {

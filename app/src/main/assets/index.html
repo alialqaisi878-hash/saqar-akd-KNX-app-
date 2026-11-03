@@ -123,7 +123,10 @@ button{cursor:pointer}
 .field input,.field select{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
 .field input.mono{text-align:left}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.types{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.types{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px}
+.dev.tuya.on{background:var(--lit);border-color:var(--lit)}
+.dev.offline{opacity:.45;filter:grayscale(1)}
+select{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
 .types button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.75rem}
 .types button svg{width:20px;height:20px}
 .types button[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--sheet));color:var(--ink);font-weight:600}
@@ -190,15 +193,41 @@ const I={
  dimmer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
  blind:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M4 7h16M4 11h16M4 15h16"/></svg>',
  hvac:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11"/><path d="M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>',
- scene:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>'
+ scene:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>',
+ tuya:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v7"/><path d="M7.5 6.3a7 7 0 1 0 9 0"/><path d="M19.5 2.5a3 3 0 0 1 2 2M18.6 4.6a1 1 0 0 1 .8.8"/></svg>'
 };
 const TYPES={
  switch:{label:"إنارة",fields:[["cmd","أمر تشغيل/إطفاء","1.001"],["status","حالة تشغيل/إطفاء","1.001"]]},
  dimmer:{label:"ديمر",fields:[["cmd","أمر تشغيل/إطفاء","1.001"],["status","حالة تشغيل/إطفاء","1.001"],["value","قيمة الإضاءة %","5.001"],["valueStatus","حالة القيمة %","5.001"]]},
  blind:{label:"ستارة",fields:[["updown","فوك/جوه","1.008"],["stop","إيقاف","1.017"],["position","الموقع %","5.001"],["positionStatus","حالة الموقع %","5.001"]]},
  hvac:{label:"تكييف",fields:[["cmd","تشغيل/إطفاء","1.001"],["setpoint","درجة الضبط","9.001"],["temp","درجة الغرفة","9.001"]]},
- scene:{label:"سين",fields:[["scene","عنوان السين","17.001"]]}
+ scene:{label:"سين",fields:[["scene","عنوان السين","17.001"]]},
+ tuya:{label:"تويا",fields:[["knx","سويچ KNX يشغّله (اختياري)","1.001"]]}
 };
+/* ---------- Tuya ---------- */
+let tuyaSt={},tuyaList=null;
+const DIM_RANGE={bright_value_v2:[10,1000],bright_value:[25,255],bright_value_1:[10,1000],bright_value_2:[10,1000],bright_value_3:[10,1000]};
+function tuyaPct(d,v){const a=d.dimMin??10,b=d.dimMax??1000;return Math.max(0,Math.min(100,Math.round((v-a)*100/(b-a))));}
+function tuyaRaw(d,pct){const a=d.dimMin??10,b=d.dimMax??1000;return Math.round(a+(b-a)*pct/100);}
+function tuyaApply(){
+ db.projects.forEach(p=>p.devices.forEach(d=>{
+  if(d.type!=="tuya"||!d.tuyaId)return;const t=tuyaSt[d.tuyaId];if(!t)return;
+  d.st.offline=!t.online;if(d.code&&d.code in t.status)d.st.on=!!t.status[d.code];
+  if(d.dimCode&&typeof t.status[d.dimCode]==="number")d.st.level=tuyaPct(d,t.status[d.dimCode]);
+ }));
+}
+function tuyaSend(d,code,value){
+ if(!d.tuyaId){toast("هذا الجهاز ما مربوط بجهاز تويا، اربطه من وضع التعديل");return false;}
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:"tuya",id:d.tuyaId,code,value}));
+ const t=new Date().toLocaleTimeString("en-GB");log.unshift({t,addr:"Tuya "+(d.tuyaName||d.name),val:code+" = "+value});if(log.length>200)log.pop();
+ return true;
+}
+async function loadTuya(force){
+ if(tuyaList&&!force)return tuyaList;
+ const r=await fetch("api/tuya/devices").then(r=>r.json()).catch(()=>({ok:false,error:"ما كدرت أوصل لبرنامج الربط"}));
+ if(!r.ok)throw new Error(r.error||"Tuya");
+ tuyaList=r.devices;r.devices.forEach(x=>tuyaSt[x.id]=x);return tuyaList;
+}
 
 /* ---------- sample project ---------- */
 function samplePlan(){
@@ -314,6 +343,8 @@ function connect(){
   const m=JSON.parse(e.data);
   if(m.t==="status"){const was=knxState;knxState=m.state;setTag();if(m.state==="connected"&&m.detail==="routing"){const t=$("#connTag");t.textContent="متصل (Routing، غير مؤكد)";t.className="tag";}if(m.state==="error"&&m.detail)toast(m.detail);if(m.state==="connected"&&was!=="connected")ws.send(JSON.stringify({t:"read",gas:statusGas()}));}
   if(m.t==="tg")incoming(m);
+  if(m.t==="tuya"){m.devices.forEach(x=>tuyaSt[x.id]=x);tuyaApply();renderStage();if(tab==="dev")renderPane();}
+  if(m.t==="tuya_err"&&role.installer)toast("تويا: "+m.msg);
   if(m.t==="error")toast(m.msg);
   if(m.t==="remote"&&location.protocol!=="https:"){const t=$("#connTag");if(t){let a=document.getElementById("remoteLink");if(!a){a=document.createElement("a");a.id="remoteLink";a.className="tag";a.target="_blank";a.style.marginInlineStart="6px";t.after(a);}a.href=m.url;a.textContent="🌐 رابط من برة البيت";a.title=m.url;}}
  };
@@ -366,27 +397,29 @@ function renderStage(){
  st.innerHTML=`<img src="${p.plan}" alt="خريطة ${esc(p.name)}">`+p.devices.map(markerHtml).join("");
 }
 function isOn(d){return d.type==="blind"?(d.st.pos||0)<100&&(d.st.pos||0)>0?false:false:!!d.st.on;}
-function bound(d){return TYPES[d.type].fields.some(f=>d.ga&&d.ga[f[0]]);}
+function bound(d){return d.type==="tuya"?!!d.tuyaId:TYPES[d.type].fields.some(f=>d.ga&&d.ga[f[0]]);}
 function markerHtml(d){
  let lvl="";
  if(d.type==="dimmer"&&d.st.on)lvl=`<span class="lvl">${d.st.level||0}%</span>`;
  if(d.type==="blind")lvl=`<span class="lvl">${d.st.pos||0}%</span>`;
  if(d.type==="hvac")lvl=`<span class="lvl">${d.st.on?(d.st.setpoint+"°"):"OFF"}</span>`;
- const on=(d.type==="switch"||d.type==="dimmer"||d.type==="hvac")&&d.st.on;
- return `<button class="dev ${d.type}${on?" on":""}${bound(d)?"":" unbound"}" data-id="${d.id}" style="left:${d.x}%;top:${d.y}%" aria-label="${esc(d.name)}"><span class="nm">${esc(d.name)}</span>${I[d.type]}${lvl}</button>`;
+ if(d.type==="tuya"&&d.dimCode&&d.st.on)lvl=`<span class="lvl">${d.st.level||0}%</span>`;
+ const on=(d.type==="switch"||d.type==="dimmer"||d.type==="hvac"||d.type==="tuya")&&d.st.on;
+ return `<button class="dev ${d.type}${on?" on":""}${bound(d)?"":" unbound"}${d.type==="tuya"&&d.st.offline?" offline":""}" data-id="${d.id}" style="left:${d.x}%;top:${d.y}%" aria-label="${esc(d.name)}"><span class="nm">${esc(d.name)}</span>${I[d.type]}${lvl}</button>`;
 }
 function statusText(d){
  if(d.type==="switch")return d.st.on?"شغّال":"طافي";
  if(d.type==="dimmer")return d.st.on?(d.st.level||0)+"%":"طافي";
  if(d.type==="blind")return "مسدودة "+(d.st.pos||0)+"%";
  if(d.type==="hvac")return d.st.on?"شغّال · "+d.st.setpoint+"°":"طافي · الغرفة "+d.st.temp+"°";
+ if(d.type==="tuya")return d.st.offline?"غير متصل":d.st.on?(d.dimCode?(d.st.level||0)+"%":"شغّال"):"طافي";
  return "سين رقم "+(d.sceneNo||1);
 }
 function renderPane(){
  ["dev","ga","log"].forEach(k=>$("#t"+k[0].toUpperCase()+k.slice(1)).setAttribute("aria-selected",tab===k));
  const p=P(),pane=$("#pane");
  if(tab==="dev"){
-  const rows=p.devices.map(d=>{const first=TYPES[d.type].fields.map(f=>d.ga&&d.ga[f[0]]).filter(Boolean)[0];
+  const rows=p.devices.map(d=>{const first=d.type==="tuya"?d.tuyaName:TYPES[d.type].fields.map(f=>d.ga&&d.ga[f[0]]).filter(Boolean)[0];
    return `<button class="row" data-dev="${d.id}"><span class="ic">${I[d.type]}</span><span class="tx"><div>${esc(d.name)}</div><div>${TYPES[d.type].label} · ${first?`<span class="mono">${esc(first)}</span>`:"<span style='color:var(--danger)'>بدون عنوان</span>"}</div></span><span class="pill${(d.st.on&&d.type!=="scene")?" on":""}">${statusText(d)}</span></button>`;}).join("");
   pane.innerHTML=(rows||`<p class="muted">ما بيه أجهزة بعد. ${mode==="edit"?"اضغط على الخريطة حتى تضيف أول جهاز.":""}</p>`)+
    (mode==="edit"?`<p class="note">النقطة الحمرة على الأيقونة تعني إنها ما مربوطة بأي Group Address.</p>`:"");
@@ -471,15 +504,37 @@ function editDevice(d,pos){
   <div class="field"><label>النوع</label><div class="types">${Object.keys(TYPES).map(k=>`<button data-type="${k}" aria-pressed="${draft.type===k}">${I[k]}${TYPES[k].label}</button>`).join("")}</div></div>
   <div class="grid2">${T.fields.map(f=>`<div class="field"><label for="g_${f[0]}">${f[1]} <span class="mono">DPT ${f[2]}</span></label><input id="g_${f[0]}" class="mono" list="gaDl" value="${esc(draft.ga[f[0]]||"")}" placeholder="1/1/1" inputmode="numeric"><small class="muted" id="n_${f[0]}">${esc(gaName(draft.ga[f[0]]))}</small></div>`).join("")}
   ${draft.type==="scene"?`<div class="field"><label for="fScene">رقم السين</label><input id="fScene" type="number" min="1" max="64" value="${draft.sceneNo||1}"></div>`:""}</div>
+  ${draft.type==="tuya"?`<div class="field"><label for="tySel">جهاز التويا</label><select id="tySel"><option value="">جاري جلب الأجهزة من تويا…</option></select><small class="muted" id="tMsg"></small></div>
+  <div class="grid2"><div class="field"><label for="tCode">تشغيل/إطفاء</label><select id="tCode"></select></div><div class="field"><label for="tDim">الإضاءة (إذا يدعم)</label><select id="tDim"></select></div></div>
+  <p class="note">إذا كتبت سويچ KNX فوك، كل ما ينداس السويچ بالحايط يشتغل/ينطفي جهاز التويا وياه.</p>`:""}
   ${gaOptions()}
   <div class="actions">${isNew?"<span></span>":`<button class="btn danger" id="del">حذف</button>`}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="ok">حفظ</button></div></div>`,
   s=>{
-   const grab=()=>{draft.name=$("#fName").value.trim();T.fields.forEach(f=>{const v=($("#g_"+f[0]).value.match(/\d+\/\d+\/\d+/)||[""])[0];draft.ga[f[0]]=v;});const sc=$("#fScene");if(sc)draft.sceneNo=Math.max(1,Math.min(64,+sc.value||1));};
+   const grab=()=>{draft.name=$("#fName").value.trim();
+    if(draft.type==="tuya"&&$("#tySel")&&$("#tySel").dataset.ready){const id=$("#tySel").value;const x=(tuyaList||[]).find(y=>y.id===id);draft.tuyaId=id||"";draft.tuyaName=x?x.name:"";draft.code=$("#tCode").value;const dc=$("#tDim").value;if(dc!==draft.dimCode){draft.dimCode=dc;const r=DIM_RANGE[dc]||[10,1000];draft.dimMin=r[0];draft.dimMax=r[1];}}T.fields.forEach(f=>{const v=($("#g_"+f[0]).value.match(/\d+\/\d+\/\d+/)||[""])[0];draft.ga[f[0]]=v;});const sc=$("#fScene");if(sc)draft.sceneNo=Math.max(1,Math.min(64,+sc.value||1));};
    s.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{grab();draft.type=b.dataset.type;draw();});
    T.fields.forEach(f=>{const inp=$("#g_"+f[0]);inp.oninput=()=>{const v=(inp.value.match(/\d+\/\d+\/\d+/)||[""])[0];$("#n_"+f[0]).textContent=gaName(v)||(v?"عنوان مو موجود بملف ETS":"");};});
    if(isNew)setTimeout(()=>$("#fName").focus(),30);
+   if(draft.type==="tuya"){
+    const sel=$("#tySel"),cs=$("#tCode"),ds=$("#tDim"),msg=$("#tMsg");
+    const fill=()=>{const x=(tuyaList||[]).find(y=>y.id===sel.value);const st=x?x.status:{};
+     const bools=Object.keys(st).filter(k=>typeof st[k]==="boolean"&&!/^(child_lock|light_mode|countdown)/.test(k));
+     const nums=Object.keys(st).filter(k=>typeof st[k]==="number"&&/^bright_value/.test(k));
+     const pref=["switch_led","switch_1","switch","switch_led_1"];
+     let c=bools.includes(draft.code)?draft.code:(pref.find(k=>bools.includes(k))||bools[0]||"");
+     cs.innerHTML=bools.map(k=>`<option ${k===c?"selected":""}>${k}</option>`).join("")||`<option value="">ما بيه</option>`;
+     let dc=nums.includes(draft.dimCode)?draft.dimCode:(draft.tuyaId===sel.value&&draft.dimCode===""?"":(nums[0]||""));
+     ds.innerHTML=`<option value="">بدون</option>`+nums.map(k=>`<option ${k===dc?"selected":""}>${k}</option>`).join("");
+     msg.textContent=x?(x.online?"متصل":"غير متصل حالياً")+(x.product?" · "+x.product:""):"";
+     const nm=$("#fName");if(x&&!nm.value.trim())nm.value=x.name;};
+    loadTuya(true).then(list=>{
+     sel.innerHTML=`<option value="">اختار جهاز…</option>`+list.map(x=>`<option value="${esc(x.id)}" ${x.id===draft.tuyaId?"selected":""}>${esc(x.name)}${x.online?"":" (غير متصل)"}</option>`).join("");
+     sel.dataset.ready="1";fill();sel.onchange=fill;
+    }).catch(e=>{sel.innerHTML=`<option value="${esc(draft.tuyaId||"")}">${esc(draft.tuyaName||"—")}</option>`;msg.textContent=e.message;msg.style.color="var(--danger)";});
+   }
    $("#ok").onclick=()=>{grab();if(!draft.name)draft.name=TYPES[draft.type].label;const p=P();
     if(isNew)p.devices.push(draft);else p.devices[p.devices.findIndex(x=>x.id===draft.id)]=draft;
+    if(draft.type==="tuya")tuyaApply();
     save();close();renderStage();renderPane();toast(isNew?"انضاف الجهاز":"انحفظ");};
    const del=$("#del");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية للحذف";return;}
     const p=P();p.devices=p.devices.filter(x=>x.id!==draft.id);save();close();renderStage();renderPane();toast("انحذف الجهاز");};
@@ -495,6 +550,20 @@ function operate(d){
   const v=!d.st.on;if(!telegram(g.cmd,"1.001",v?1:0))return;d.st.on=v;respond(g.status,"1.001",v?1:0);refresh();return;
  }
  if(d.type==="scene"){if(!telegram(g.scene,"17.001",d.sceneNo||1))return;toast("انرسل "+d.name);return;}
+ if(d.type==="tuya"){
+  if(d.st.offline)toast(d.name+": الجهاز غير متصل بتويا");
+  if(!d.dimCode){const v=!d.st.on;if(!tuyaSend(d,d.code,v))return;d.st.on=v;refresh();return;}
+  sheet(`<header><h2>${esc(d.name)}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+   <div class="big"><button id="on" class="${d.st.on?"active":""}">تشغيل</button><button id="off" class="${!d.st.on?"active":""}">إطفاء</button></div>
+   <div class="slider"><div class="v" id="v">${d.st.level||0}%</div><input type="range" id="r" min="1" max="100" step="1" value="${d.st.level||0}" aria-label="الإضاءة"></div>`,()=>{
+   const r=$("#r"),v=$("#v");
+   $("#on").onclick=()=>{if(!tuyaSend(d,d.code,true))return;d.st.on=true;refresh();close();operate(d);};
+   $("#off").onclick=()=>{if(!tuyaSend(d,d.code,false))return;d.st.on=false;refresh();close();operate(d);};
+   r.oninput=()=>v.textContent=r.value+"%";
+   r.onchange=()=>{const n=+r.value;if(!d.st.on){tuyaSend(d,d.code,true);d.st.on=true;}if(!tuyaSend(d,d.dimCode,tuyaRaw(d,n)))return;d.st.level=n;refresh();};
+  });
+  return;
+ }
  const body=()=>{
   if(d.type==="dimmer")return `<div class="big"><button id="on" class="${d.st.on?"active":""}">تشغيل</button><button id="off" class="${!d.st.on?"active":""}">إطفاء</button></div>
    <div class="slider"><div class="v" id="v">${d.st.on?d.st.level:0}%</div><input type="range" id="r" min="0" max="100" step="5" value="${d.st.on?d.st.level:0}" aria-label="الإضاءة"></div>`;

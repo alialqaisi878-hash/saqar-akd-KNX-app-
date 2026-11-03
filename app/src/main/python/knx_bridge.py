@@ -25,6 +25,11 @@ from xknx.io import ConnectionConfig, ConnectionType, SecureConfig
 from xknx.telegram import GroupAddress, Telegram
 from xknx.telegram.apci import GroupValueRead, GroupValueResponse, GroupValueWrite
 
+try:
+    from tuya_cloud import TuyaCloud, TuyaError
+except ImportError:  # file missing next to the bridge
+    TuyaCloud = None
+
 HERE = Path(__file__).resolve().parent
 # settings + project can live elsewhere (the Android app keeps them in its private storage)
 DATA = Path(os.environ.get("KNX_BRIDGE_DATA") or HERE)
@@ -39,6 +44,101 @@ clients: set[web.WebSocketResponse] = set()
 status = {"state": "connecting", "detail": ""}
 relay_state = {"state": "off", "detail": ""}  # connection to the company server
 xknx: XKNX | None = None
+
+# ---------------------------------------------------------------- Tuya (cloud)
+TUYA_ID = str(CFG.get("tuya_access_id") or "").strip()
+TUYA_SECRET = str(CFG.get("tuya_access_secret") or "").strip()
+tuya = TuyaCloud(TUYA_ID, TUYA_SECRET, str(CFG.get("tuya_region") or "eu")) if (TuyaCloud and TUYA_ID and TUYA_SECRET) else None
+tuya_cache: dict[str, dict] = {}  # device id -> {name, online, status{code:value}}
+tuya_state = {"state": "off" if tuya is None else "connecting", "detail": ""}
+tuya_kick: asyncio.Event | None = None  # created inside the loop
+knx_links: dict[str, list[dict]] = {}  # KNX group address -> tuya devices it drives
+
+
+def load_links() -> None:
+    """KNX group address -> Tuya device, read from the saved project (devices of type tuya with ga.knx)."""
+    knx_links.clear()
+    try:
+        db = json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return
+    for pr in db.get("projects", []):
+        for d in pr.get("devices", []):
+            ga = (d.get("ga") or {}).get("knx")
+            if d.get("type") == "tuya" and ga and d.get("tuyaId") and d.get("code"):
+                knx_links.setdefault(ga, []).append({"id": d["tuyaId"], "code": d["code"]})
+
+
+def project_tuya_ids() -> set[str]:
+    try:
+        db = json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return set()
+    return {d["tuyaId"] for pr in db.get("projects", []) for d in pr.get("devices", []) if d.get("type") == "tuya" and d.get("tuyaId")}
+
+
+async def tuya_refresh() -> None:
+    devs = await tuya.devices()
+    changed = []
+    for d in devs:
+        old = tuya_cache.get(d["id"])
+        if old != d:
+            tuya_cache[d["id"]] = d
+            changed.append(d)
+    tuya_state.update(state="connected", detail=f"{len(devs)} devices")
+    if changed:
+        broadcast({"t": "tuya", "devices": changed})
+
+
+async def tuya_loop() -> None:
+    global tuya_kick
+    tuya_kick = asyncio.Event()
+    fast = int(CFG.get("tuya_poll", 20))
+    while True:
+        try:
+            await tuya_refresh()
+        except Exception as err:  # noqa: BLE001
+            tuya_state.update(state="error", detail=str(err))
+            log.warning("Tuya: %s", err)
+            broadcast({"t": "tuya_err", "msg": str(err)})
+        # poll fast while someone is looking at the page and the project uses Tuya, slow otherwise
+        wait = fast if (clients and project_tuya_ids()) else 300
+        try:
+            await asyncio.wait_for(tuya_kick.wait(), wait)
+        except asyncio.TimeoutError:
+            pass
+        tuya_kick.clear()
+
+
+async def tuya_send(dev_id: str, code: str, value) -> None:
+    await tuya.command(dev_id, code, value)
+    log.info("tuya %s %s = %s", dev_id, code, value)
+    d = tuya_cache.get(dev_id)
+    if d is not None:
+        d = {**d, "status": {**d["status"], code: value}}
+        tuya_cache[dev_id] = d
+        broadcast({"t": "tuya", "devices": [d]})
+    if tuya_kick is not None:  # read the real state back a moment later
+        asyncio.get_running_loop().call_later(2.5, tuya_kick.set)
+
+
+async def tuya_devices(req):
+    if tuya is None:
+        return web.json_response({"ok": False, "error": "اكتب Access ID و Access Secret مال تويا بإعدادات KNX Prog"})
+    try:
+        await tuya_refresh()
+    except Exception as err:  # noqa: BLE001
+        return web.json_response({"ok": False, "error": str(err)})
+    return web.json_response({"ok": True, "devices": sorted(tuya_cache.values(), key=lambda d: d["name"])})
+
+
+async def tuya_spec(req):
+    if tuya is None:
+        return web.json_response({"ok": False, "error": "Tuya not set"})
+    try:
+        return web.json_response({"ok": True, "spec": await tuya.spec(req.query.get("id", ""))})
+    except Exception as err:  # noqa: BLE001
+        return web.json_response({"ok": False, "error": str(err)})
 
 
 # ---------------------------------------------------------------- KNX side
@@ -103,9 +203,19 @@ def on_telegram(t: Telegram) -> None:
     msg = {"t": "tg", "ga": str(t.destination_address), "src": str(t.source_address)}
     if isinstance(p.value, DPTBinary):
         msg["bit"] = int(p.value.value)
+        if tuya is not None and isinstance(p, GroupValueWrite):
+            for link in knx_links.get(msg["ga"], []):
+                asyncio.ensure_future(_safe_tuya(link["id"], link["code"], bool(msg["bit"])))
     else:
         msg["bytes"] = list(p.value.value)
     broadcast(msg)
+
+
+async def _safe_tuya(dev_id: str, code: str, value) -> None:
+    try:
+        await tuya_send(dev_id, code, value)
+    except Exception as err:  # noqa: BLE001
+        log.warning("Tuya command failed: %s", err)
 
 
 def payload_for(dpt: str, value):
@@ -185,7 +295,7 @@ async def bridge_info(_req):
     """Status for the KNX Prog app screen."""
     return web.json_response({
         "knx": status, "relay": relay_state, "link": remote_url["url"],
-        "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""),
+        "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
     })
 
 
@@ -469,6 +579,7 @@ async def put_project(req):
     data = await req.text()
     json.loads(data)  # validate
     PROJECT_FILE.write_text(data, encoding="utf-8")
+    load_links()
     return web.json_response({"ok": True})
 
 
@@ -479,11 +590,24 @@ async def ws_handler(req):
     await ws.send_str(json.dumps({"t": "status", **status}))
     if remote_url["url"]:
         await ws.send_str(json.dumps({"t": "remote", "url": remote_url["url"]}))
+    if tuya_cache:
+        await ws.send_str(json.dumps({"t": "tuya", "devices": list(tuya_cache.values())}))
+    if tuya_kick is not None and len(clients) == 1:
+        tuya_kick.set()  # first viewer: fresh Tuya state now
     try:
         async for msg in ws:
             if msg.type != WSMsgType.TEXT:
                 continue
             m = json.loads(msg.data)
+            if m.get("t") == "tuya":
+                if tuya is None:
+                    await ws.send_str(json.dumps({"t": "error", "msg": "تويا ما مربوط: اكتب Access ID و Secret بإعدادات KNX Prog"}))
+                    continue
+                try:
+                    await tuya_send(m["id"], m["code"], m["value"])
+                except Exception as err:  # noqa: BLE001
+                    await ws.send_str(json.dumps({"t": "error", "msg": "تويا: " + str(err)}))
+                continue
             if status["state"] != "connected":
                 await ws.send_str(json.dumps({"t": "error", "msg": "KNX not connected"}))
                 continue
@@ -524,6 +648,8 @@ async def main() -> None:
         web.get("/api/project", get_project),
         web.get("/api/role", role),
         web.get("/api/bridge", bridge_info),
+        web.get("/api/tuya/devices", tuya_devices),
+        web.get("/api/tuya/spec", tuya_spec),
         web.post("/api/installer", installer_login),
         web.post("/api/installer/logout", installer_logout),
         web.put("/api/project", put_project),
@@ -540,6 +666,9 @@ async def main() -> None:
     if CFG.get("open_browser", True):
         webbrowser.open(f"http://localhost:{PORT}")
     asyncio.create_task(knx_loop())
+    load_links()
+    if tuya is not None:
+        asyncio.create_task(tuya_loop())
     if (CFG.get("relay_url") or "").strip() and (CFG.get("house_id") or "").strip():
         if not REMOTE_PW:
             log.warning("Set remote_password in config.json, otherwise the fixed link refuses everyone.")
