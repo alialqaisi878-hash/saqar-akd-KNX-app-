@@ -93,6 +93,7 @@ public class BridgeService extends Service {
                 PyObject env = py.getModule("os").get("environ");
                 env.callAttr("__setitem__", "KNX_BRIDGE_DATA", Config.dataDir(ctx).getAbsolutePath());
                 env.callAttr("__setitem__", "KNX_BRIDGE_WEB", web.getAbsolutePath());
+                env.callAttr("__setitem__", "TZ", java.util.TimeZone.getDefault().getID());
                 PyObject bridge = py.getModule("knx_bridge");
                 while (true) {
                     try {

@@ -30,6 +30,10 @@ try:
 except ImportError:  # file missing next to the bridge
     TuyaCloud = None
 
+import time
+if hasattr(time, "tzset"):
+    time.tzset()  # Android app passes the tablet's time zone in TZ (schedules use local time)
+
 HERE = Path(__file__).resolve().parent
 # settings + project can live elsewhere (the Android app keeps them in its private storage)
 DATA = Path(os.environ.get("KNX_BRIDGE_DATA") or HERE)
@@ -110,16 +114,116 @@ async def tuya_loop() -> None:
         tuya_kick.clear()
 
 
-async def tuya_send(dev_id: str, code: str, value) -> None:
-    await tuya.command(dev_id, code, value)
-    log.info("tuya %s %s = %s", dev_id, code, value)
+async def tuya_send(dev_id: str, code, value=None) -> None:
+    cmds = code if isinstance(code, list) else [{"code": code, "value": value}]
+    await tuya.command(dev_id, cmds)
+    log.info("tuya %s %s", dev_id, cmds)
     d = tuya_cache.get(dev_id)
     if d is not None:
-        d = {**d, "status": {**d["status"], code: value}}
+        d = {**d, "status": {**d["status"], **{c["code"]: c["value"] for c in cmds}}}
         tuya_cache[dev_id] = d
         broadcast({"t": "tuya", "devices": [d]})
     if tuya_kick is not None:  # read the real state back a moment later
         asyncio.get_running_loop().call_later(2.5, tuya_kick.set)
+
+
+# ---------------------------------------------------------------- schedules
+SCHED_FILE = DATA / "schedules.json"
+
+
+def load_schedules() -> list:
+    try:
+        return json.loads(SCHED_FILE.read_text(encoding="utf-8")).get("schedules", [])
+    except Exception:  # noqa: BLE001
+        return []
+
+
+async def get_schedules(_req):
+    return web.json_response({"schedules": load_schedules()})
+
+
+async def put_schedules(req):
+    data = await req.json()
+    if not isinstance(data.get("schedules"), list):
+        return web.json_response({"ok": False}, status=400)
+    SCHED_FILE.write_text(json.dumps({"schedules": data["schedules"]}, ensure_ascii=False), encoding="utf-8")
+    return web.json_response({"ok": True})
+
+
+def find_device(dev_id: str):
+    try:
+        db = json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    for pr in db.get("projects", []):
+        for d in pr.get("devices", []):
+            if d.get("id") == dev_id:
+                return d
+    return None
+
+
+async def run_action(dev: dict, on: bool) -> None:
+    """Switch one floor-plan device on/off (scene: run it). Used by schedules and 'all off'."""
+    t, ga = dev.get("type"), dev.get("ga") or {}
+    if t == "tuya":
+        if tuya is not None and dev.get("tuyaId") and dev.get("code"):
+            await tuya_send(dev["tuyaId"], dev["code"], bool(on))
+        return
+    if status["state"] != "connected":
+        raise RuntimeError("KNX not connected")
+    if t in ("switch", "dimmer", "hvac") and ga.get("cmd"):
+        send_write(ga["cmd"], "1.001", 1 if on else 0)
+    elif t == "blind" and ga.get("updown"):
+        send_write(ga["updown"], "1.008", 1 if on else 0)  # on = close (down)
+    elif t == "scene" and ga.get("scene") and on:
+        send_write(ga["scene"], "17.001", int(dev.get("sceneNo") or 1))
+
+
+async def schedule_loop() -> None:
+    import datetime
+    done = ""
+    while True:
+        now = datetime.datetime.now()
+        key = now.strftime("%Y-%m-%d %H:%M")
+        if key != done:
+            done = key
+            hm, wd = now.strftime("%H:%M"), (now.weekday() + 1) % 7  # 0 = Sunday
+            for s in load_schedules():
+                if not s.get("enabled", True) or s.get("time") != hm:
+                    continue
+                days = s.get("days") or [0, 1, 2, 3, 4, 5, 6]
+                if wd not in days:
+                    continue
+                for dev_id in s.get("devices", []):
+                    dev = find_device(dev_id)
+                    if dev is None:
+                        continue
+                    try:
+                        await run_action(dev, bool(s.get("on", True)))
+                        log.info("schedule %s: %s -> %s", s.get("name", ""), dev.get("name"), s.get("on"))
+                    except Exception as err:  # noqa: BLE001
+                        log.warning("schedule failed for %s: %s", dev.get("name"), err)
+                    await asyncio.sleep(0.1)
+        await asyncio.sleep(15)
+
+
+async def all_off(_req):
+    try:
+        db = json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return web.json_response({"ok": False})
+    n = 0
+    prs = [pr for pr in db.get("projects", []) if pr.get("id") == db.get("current")] or db.get("projects", [])[:1]
+    for pr in prs:
+        for d in pr.get("devices", []):
+            if d.get("type") in ("switch", "dimmer", "tuya", "hvac"):
+                try:
+                    await run_action(d, False)
+                    n += 1
+                except Exception as err:  # noqa: BLE001
+                    log.warning("all off: %s %s", d.get("name"), err)
+                await asyncio.sleep(0.05)
+    return web.json_response({"ok": True, "count": n})
 
 
 async def tuya_devices(req):
@@ -604,7 +708,10 @@ async def ws_handler(req):
                     await ws.send_str(json.dumps({"t": "error", "msg": "تويا ما مربوط: اكتب Access ID و Secret بإعدادات KNX Prog"}))
                     continue
                 try:
-                    await tuya_send(m["id"], m["code"], m["value"])
+                    if m.get("commands"):
+                        await tuya_send(m["id"], m["commands"])
+                    else:
+                        await tuya_send(m["id"], m["code"], m["value"])
                 except Exception as err:  # noqa: BLE001
                     await ws.send_str(json.dumps({"t": "error", "msg": "تويا: " + str(err)}))
                 continue
@@ -650,6 +757,9 @@ async def main() -> None:
         web.get("/api/bridge", bridge_info),
         web.get("/api/tuya/devices", tuya_devices),
         web.get("/api/tuya/spec", tuya_spec),
+        web.get("/api/schedules", get_schedules),
+        web.put("/api/schedules", put_schedules),
+        web.post("/api/alloff", all_off),
         web.post("/api/installer", installer_login),
         web.post("/api/installer/logout", installer_logout),
         web.put("/api/project", put_project),
@@ -667,6 +777,7 @@ async def main() -> None:
         webbrowser.open(f"http://localhost:{PORT}")
     asyncio.create_task(knx_loop())
     load_links()
+    asyncio.create_task(schedule_loop())
     if tuya is not None:
         asyncio.create_task(tuya_loop())
     if (CFG.get("relay_url") or "").strip() and (CFG.get("house_id") or "").strip():

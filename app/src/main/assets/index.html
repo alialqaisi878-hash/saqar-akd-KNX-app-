@@ -126,6 +126,17 @@ button{cursor:pointer}
 .types{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px}
 .dev.tuya.on{background:var(--lit);border-color:var(--lit)}
 .dev.offline{opacity:.45;filter:grayscale(1)}
+.swatches{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:6px 0 4px}
+.swatches button{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
+.swatches button.white{background:linear-gradient(135deg,#ffd8a0,#fff,#cfe3ff);width:auto;border-radius:18px;padding:0 12px;font-size:.8rem;color:#333}
+.ct{background:linear-gradient(90deg,#ffb35c,#fff4e0,#cfe3ff);height:10px;border-radius:5px;margin-bottom:4px}
+.meter{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0;text-align:center}
+.meter div{background:var(--chip);border-radius:10px;padding:8px 4px}.meter b{display:block;font-family:var(--f-mono);font-size:1.05rem;color:var(--ink)}
+.sch{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
+.sch .tm{font-family:var(--f-mono);font-size:1.3rem;color:var(--ink)}.sch .tx{flex:1;font-size:.82rem;color:var(--muted)}
+.days{display:flex;gap:4px;flex-wrap:wrap}.days label{display:flex;align-items:center;gap:2px;font-size:.78rem;border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.devpick{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px}.devpick label{display:flex;gap:6px;align-items:center;padding:3px 0;font-size:.85rem}
+#allOff.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 select{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
 .types button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.75rem}
 .types button svg{width:20px;height:20px}
@@ -153,6 +164,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="controls">
       <select class="select" id="projSel" aria-label="المشروع"></select>
       <button class="btn" id="newProj">+ مشروع جديد</button>
+      <button class="btn" id="allOff" title="يطفي كل الإنارة والأجهزة بالبيت">⏻ إطفاء الكل</button>
       <button class="btn" id="instBtn" hidden>🔒 الفني</button>
       <div class="seg" role="group" aria-label="الوضع">
         <button id="mEdit" aria-pressed="true">تعديل (الفني)</button>
@@ -176,6 +188,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <div class="tabs" role="tablist">
         <button role="tab" id="tDev" aria-selected="true">الأجهزة</button>
         <button role="tab" id="tGa" aria-selected="false">عناوين ETS</button>
+        <button role="tab" id="tSch" aria-selected="false">⏰ المواعيد</button>
         <button role="tab" id="tLog" aria-selected="false">سجل الأوامر</button>
       </div>
       <div class="pane" id="pane"></div>
@@ -209,6 +222,22 @@ let tuyaSt={},tuyaList=null;
 const DIM_RANGE={bright_value_v2:[10,1000],bright_value:[25,255],bright_value_1:[10,1000],bright_value_2:[10,1000],bright_value_3:[10,1000]};
 function tuyaPct(d,v){const a=d.dimMin??10,b=d.dimMax??1000;return Math.max(0,Math.min(100,Math.round((v-a)*100/(b-a))));}
 function tuyaRaw(d,pct){const a=d.dimMin??10,b=d.dimMax??1000;return Math.round(a+(b-a)*pct/100);}
+function tuyaFeat(d){
+ const st=(tuyaSt[d.tuyaId]||{}).status||{};
+ const f={st};
+ f.temp=["temp_value_v2","temp_value"].find(k=>typeof st[k]==="number");f.tempMax=f.temp==="temp_value"?255:1000;
+ f.colour=["colour_data_v2","colour_data"].find(k=>k in st);f.cMax=f.colour==="colour_data"?255:1000;
+ f.mode="work_mode" in st;
+ if(typeof st.cur_power==="number"){f.power=st.cur_power/10;f.volt=typeof st.cur_voltage==="number"?st.cur_voltage/10:null;f.amp=typeof st.cur_current==="number"?st.cur_current/1000:null;}
+ return f;
+}
+function tuyaColour(f){let c=f.st[f.colour];if(typeof c==="string"){try{c=JSON.parse(c);}catch(e){c=null;}}return c&&typeof c==="object"?c:null;}
+function tuyaTint(d){
+ if(d.type!=="tuya"||!d.st.on)return "";const f=tuyaFeat(d);
+ if(f.colour&&f.st.work_mode==="colour"){const c=tuyaColour(f);if(c)return `background:hsl(${c.h},90%,60%);border-color:hsl(${c.h},90%,50%);box-shadow:0 0 0 8px hsla(${c.h},90%,60%,.35)`;}
+ if(f.temp){const k=f.st[f.temp]/f.tempMax;return `background:hsl(${36-k*(36-210)},${90-k*40}%,${62+k*18}%)`;}
+ return "";
+}
 function tuyaApply(){
  db.projects.forEach(p=>p.devices.forEach(d=>{
   if(d.type!=="tuya"||!d.tuyaId)return;const t=tuyaSt[d.tuyaId];if(!t)return;
@@ -403,20 +432,20 @@ function markerHtml(d){
  if(d.type==="dimmer"&&d.st.on)lvl=`<span class="lvl">${d.st.level||0}%</span>`;
  if(d.type==="blind")lvl=`<span class="lvl">${d.st.pos||0}%</span>`;
  if(d.type==="hvac")lvl=`<span class="lvl">${d.st.on?(d.st.setpoint+"°"):"OFF"}</span>`;
- if(d.type==="tuya"&&d.dimCode&&d.st.on)lvl=`<span class="lvl">${d.st.level||0}%</span>`;
+ if(d.type==="tuya"&&d.st.on){const pw=tuyaFeat(d).power;if(pw!=null)lvl=`<span class="lvl">${Math.round(pw)}W</span>`;else if(d.dimCode)lvl=`<span class="lvl">${d.st.level||0}%</span>`;}
  const on=(d.type==="switch"||d.type==="dimmer"||d.type==="hvac"||d.type==="tuya")&&d.st.on;
- return `<button class="dev ${d.type}${on?" on":""}${bound(d)?"":" unbound"}${d.type==="tuya"&&d.st.offline?" offline":""}" data-id="${d.id}" style="left:${d.x}%;top:${d.y}%" aria-label="${esc(d.name)}"><span class="nm">${esc(d.name)}</span>${I[d.type]}${lvl}</button>`;
+ return `<button class="dev ${d.type}${on?" on":""}${bound(d)?"":" unbound"}${d.type==="tuya"&&d.st.offline?" offline":""}" data-id="${d.id}" style="left:${d.x}%;top:${d.y}%;${tuyaTint(d)}" aria-label="${esc(d.name)}"><span class="nm">${esc(d.name)}</span>${I[d.type]}${lvl}</button>`;
 }
 function statusText(d){
  if(d.type==="switch")return d.st.on?"شغّال":"طافي";
  if(d.type==="dimmer")return d.st.on?(d.st.level||0)+"%":"طافي";
  if(d.type==="blind")return "مسدودة "+(d.st.pos||0)+"%";
  if(d.type==="hvac")return d.st.on?"شغّال · "+d.st.setpoint+"°":"طافي · الغرفة "+d.st.temp+"°";
- if(d.type==="tuya")return d.st.offline?"غير متصل":d.st.on?(d.dimCode?(d.st.level||0)+"%":"شغّال"):"طافي";
+ if(d.type==="tuya"){const pw=tuyaFeat(d).power;return d.st.offline?"غير متصل":d.st.on?(pw!=null?"شغّال · "+Math.round(pw)+"W":d.dimCode?(d.st.level||0)+"%":"شغّال"):"طافي";}
  return "سين رقم "+(d.sceneNo||1);
 }
 function renderPane(){
- ["dev","ga","log"].forEach(k=>$("#t"+k[0].toUpperCase()+k.slice(1)).setAttribute("aria-selected",tab===k));
+ ["dev","ga","sch","log"].forEach(k=>$("#t"+k[0].toUpperCase()+k.slice(1)).setAttribute("aria-selected",tab===k));
  const p=P(),pane=$("#pane");
  if(tab==="dev"){
   const rows=p.devices.map(d=>{const first=d.type==="tuya"?d.tuyaName:TYPES[d.type].fields.map(f=>d.ga&&d.ga[f[0]]).filter(Boolean)[0];
@@ -438,6 +467,7 @@ function renderPane(){
   const s=$("#gaSearch");s.oninput=()=>{gaFilter=s.value;const pos=s.selectionStart;renderPane();const n=$("#gaSearch");n.focus();n.setSelectionRange(pos,pos);};
   const ef=$("#etsFile");if(ef)ef.onchange=()=>ef.files[0]&&importEts(ef.files[0]);
  }
+ if(tab==="sch")renderSchedules(pane);
  if(tab==="log"){
   pane.innerHTML=`<p class="muted">كل ضغطة بوضع الاستخدام تطلع هنا بالضبط مثل ما راح تنرسل على الـ KNX (GroupValueWrite). الأوامر هنا تنرسل فعلاً للـ IP Router، والسطور الخضر هي الردود والحالات اللي تجي من المنظومة.</p>`+
   (log.length?`<div class="log">${log.map(l=>`<div class="${l.rx?"rx":""}"><span class="t">${l.t}</span><span>${l.rx?"← status":"→ write"}</span><b>${esc(l.addr)}</b><span>${esc(l.val)}</span></div>`).join("")}</div>`:`<p class="muted">ما بيه أوامر بعد. حوّل لوضع الاستخدام واضغط على أي أيقونة.</p>`);
@@ -483,6 +513,61 @@ $("#pane").addEventListener("click",e=>{
 });
 
 /* ---------- sheets ---------- */
+/* ---------- schedules (run by the bridge, also when no page is open) ---------- */
+let schedules=null;
+const DAYS=["أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"];
+const schedulable=d=>["switch","dimmer","tuya","hvac","blind","scene"].includes(d.type);
+async function loadSchedules(){try{const r=await fetch("api/schedules");schedules=r.ok?(await r.json()).schedules:[];}catch(e){schedules=[];}}
+function saveSchedules(){fetch("api/schedules",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({schedules})}).then(r=>{if(!r.ok)throw 0;}).catch(()=>toast("ما انحفظت المواعيد، تأكد إن الجسر شغّال"));}
+function actLabel(s){const ds=(s.devices||[]).map(id=>P().devices.find(x=>x.id===id)).filter(Boolean);
+ const allScene=ds.length&&ds.every(x=>x.type==="scene");return allScene?"تشغيل":s.on?"تشغيل":"إطفاء";}
+function renderSchedules(pane){
+ if(schedules===null){pane.innerHTML=`<p class="muted">جاري التحميل…</p>`;loadSchedules().then(()=>{if(tab==="sch")renderPane();});return;}
+ const p=P();
+ pane.innerHTML=`<p class="muted">المواعيد تشتغل من التابليت بالبيت، حتى لو كل التلفونات مسدودة.</p>`+
+  (schedules.length?schedules.map((s,i)=>{const names=(s.devices||[]).map(id=>(p.devices.find(x=>x.id===id)||{}).name).filter(Boolean);
+   const days=(s.days&&s.days.length&&s.days.length<7)?s.days.map(x=>DAYS[x]).join("، "):"كل يوم";
+   return `<div class="sch"><span class="tm">${esc(s.time)}</span><span class="tx"><b style="color:var(--ink)">${esc(s.name||actLabel(s))}</b><br>${actLabel(s)}: ${esc(names.join("، ")||"—")}<br>${days}</span>
+   <label title="مفعّل"><input type="checkbox" data-en="${i}" ${s.enabled!==false?"checked":""}></label><button class="btn" data-ed="${i}">تعديل</button></div>`;}).join(""):`<p class="muted">ما بيه مواعيد بعد.</p>`)+
+  `<button class="btn primary" id="addSch">+ موعد جديد</button>`;
+ pane.querySelectorAll("[data-en]").forEach(c=>c.onchange=()=>{schedules[+c.dataset.en].enabled=c.checked;saveSchedules();});
+ pane.querySelectorAll("[data-ed]").forEach(b=>b.onclick=()=>editSchedule(+b.dataset.ed));
+ $("#addSch").onclick=()=>editSchedule(-1);
+}
+function editSchedule(i){
+ const s=i>=0?JSON.parse(JSON.stringify(schedules[i])):{id:uid(),name:"",time:"19:00",on:true,days:[0,1,2,3,4,5,6],devices:[],enabled:true};
+ const devs=P().devices.filter(schedulable);
+ sheet(`<header><h2>${i>=0?"تعديل الموعد":"موعد جديد"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+  <div class="grid2"><div class="field"><label for="sName">الاسم (اختياري)</label><input id="sName" value="${esc(s.name)}" placeholder="مثلاً: إنارة المسا"></div>
+  <div class="field"><label for="sTime">الوقت</label><input id="sTime" type="time" value="${esc(s.time)}"></div></div>
+  <div class="field"><label>شنو يسوي</label><div class="big"><button id="sOn" class="${s.on?"active":""}">تشغيل</button><button id="sOff" class="${!s.on?"active":""}">إطفاء</button></div></div>
+  <div class="field"><label>الأيام</label><div class="days">${DAYS.map((n,k)=>`<label><input type="checkbox" data-day="${k}" ${s.days.includes(k)?"checked":""}>${n}</label>`).join("")}</div></div>
+  <div class="field"><label>الأجهزة</label><div class="devpick">${devs.map(d=>`<label><input type="checkbox" data-dv="${d.id}" ${s.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">· ${TYPES[d.type].label}</span></label>`).join("")||"<span class='muted'>ما بيه أجهزة</span>"}</div></div>
+  <p class="note">الستارة: تشغيل = تنزل، إطفاء = تصعد. السين يشتغل بس ويا "تشغيل".</p>
+  <div class="actions">${i>=0?`<button class="btn danger" id="sDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="sOk">حفظ</button></div></div>`,()=>{
+  $("#sOn").onclick=()=>{s.on=true;$("#sOn").classList.add("active");$("#sOff").classList.remove("active");};
+  $("#sOff").onclick=()=>{s.on=false;$("#sOff").classList.add("active");$("#sOn").classList.remove("active");};
+  $("#sOk").onclick=()=>{s.name=$("#sName").value.trim();s.time=$("#sTime").value||"19:00";
+   s.days=[...document.querySelectorAll("[data-day]:checked")].map(c=>+c.dataset.day);
+   s.devices=[...document.querySelectorAll("[data-dv]:checked")].map(c=>c.dataset.dv);
+   if(!s.devices.length){toast("اختار جهاز واحد على الأقل");return;}
+   if(!s.days.length){toast("اختار يوم واحد على الأقل");return;}
+   if(i>=0)schedules[i]=s;else schedules.push(s);
+   schedules.sort((a,b)=>a.time.localeCompare(b.time));saveSchedules();close();renderPane();toast("انحفظ الموعد");};
+  const del=$("#sDel");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية للحذف";return;}
+   schedules.splice(i,1);saveSchedules();close();renderPane();toast("انحذف الموعد");};
+ });
+}
+let allOffT;
+$("#allOff").onclick=async()=>{
+ const b=$("#allOff");
+ if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="⏻ متأكد؟ اضغط مرة ثانية";clearTimeout(allOffT);allOffT=setTimeout(()=>{b.classList.remove("armed");b.textContent="⏻ إطفاء الكل";},3500);return;}
+ clearTimeout(allOffT);b.classList.remove("armed");b.textContent="⏻ إطفاء الكل";
+ const r=await fetch("api/alloff",{method:"POST"}).then(r=>r.ok?r.json():null).catch(()=>null);
+ P().devices.forEach(d=>{if(["switch","dimmer","tuya","hvac"].includes(d.type))d.st.on=false;});renderStage();renderPane();
+ toast(r&&r.ok?"انطفى كلشي ("+r.count+" جهاز)":"ما وصل الأمر للجسر");
+};
+
 function sheet(html,onMount){
  const L=$("#layer");L.innerHTML=`<div class="scrim" id="scrim"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
  $("#scrim").addEventListener("click",e=>{if(e.target.id==="scrim")close();});
@@ -552,15 +637,32 @@ function operate(d){
  if(d.type==="scene"){if(!telegram(g.scene,"17.001",d.sceneNo||1))return;toast("انرسل "+d.name);return;}
  if(d.type==="tuya"){
   if(d.st.offline)toast(d.name+": الجهاز غير متصل بتويا");
-  if(!d.dimCode){const v=!d.st.on;if(!tuyaSend(d,d.code,v))return;d.st.on=v;refresh();return;}
+  const f=tuyaFeat(d);
+  if(!d.dimCode&&!f.temp&&!f.colour&&f.power==null){const v=!d.st.on;if(!tuyaSend(d,d.code,v))return;d.st.on=v;refresh();return;}
+  const multi=(cmds)=>{if(!d.tuyaId){toast("هذا الجهاز ما مربوط بجهاز تويا");return false;}
+   if(!d.st.on){cmds.unshift({code:d.code,value:true});d.st.on=true;}
+   if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:"tuya",id:d.tuyaId,commands:cmds}));
+   const st=(tuyaSt[d.tuyaId]||{}).status;if(st)cmds.forEach(c=>st[c.code]=c.value);
+   log.unshift({t:new Date().toLocaleTimeString("en-GB"),addr:"Tuya "+(d.tuyaName||d.name),val:cmds.map(c=>c.code+"="+JSON.stringify(c.value)).join(" ")});refresh();return true;};
+  const ct=f.temp?Math.round(f.st[f.temp]*100/f.tempMax):50;
+  const hues=[[0,"أحمر"],[28,"برتقالي"],[52,"أصفر"],[120,"أخضر"],[180,"سمائي"],[230,"أزرق"],[275,"بنفسجي"],[320,"وردي"]];
   sheet(`<header><h2>${esc(d.name)}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
    <div class="big"><button id="on" class="${d.st.on?"active":""}">تشغيل</button><button id="off" class="${!d.st.on?"active":""}">إطفاء</button></div>
-   <div class="slider"><div class="v" id="v">${d.st.level||0}%</div><input type="range" id="r" min="1" max="100" step="1" value="${d.st.level||0}" aria-label="الإضاءة"></div>`,()=>{
-   const r=$("#r"),v=$("#v");
+   ${f.power!=null?`<div class="meter"><div><b>${f.power.toFixed(1)}</b>واط</div><div><b>${f.volt!=null?f.volt.toFixed(0):"–"}</b>فولت</div><div><b>${f.amp!=null?f.amp.toFixed(2):"–"}</b>أمبير</div></div>`:""}
+   ${d.dimCode?`<div class="slider"><div class="v" id="v">${d.st.level||0}%</div><input type="range" id="r" min="1" max="100" step="1" value="${d.st.level||0}" aria-label="الإضاءة"></div>`:""}
+   ${f.temp?`<div class="slider" dir="ltr"><div class="muted" style="display:flex;justify-content:space-between"><span>دافي</span><span>لون الإضاءة</span><span>بارد</span></div><div class="ct"></div><input type="range" id="ct" min="0" max="100" step="1" value="${ct}" aria-label="لون الإضاءة"></div>`:""}
+   ${f.colour?`<div class="swatches">${f.temp||f.mode?`<button class="white" id="white">أبيض</button>`:""}${hues.map(([h,n])=>`<button data-h="${h}" title="${n}" aria-label="${n}" style="background:hsl(${h},90%,55%)"></button>`).join("")}</div>`:""}`,()=>{
    $("#on").onclick=()=>{if(!tuyaSend(d,d.code,true))return;d.st.on=true;refresh();close();operate(d);};
    $("#off").onclick=()=>{if(!tuyaSend(d,d.code,false))return;d.st.on=false;refresh();close();operate(d);};
-   r.oninput=()=>v.textContent=r.value+"%";
-   r.onchange=()=>{const n=+r.value;if(!d.st.on){tuyaSend(d,d.code,true);d.st.on=true;}if(!tuyaSend(d,d.dimCode,tuyaRaw(d,n)))return;d.st.level=n;refresh();};
+   const r=$("#r"),v=$("#v");
+   if(r){r.oninput=()=>v.textContent=r.value+"%";
+    r.onchange=()=>{const n=+r.value;d.st.level=n;const cur=tuyaFeat(d);
+     if(cur.colour&&cur.st.work_mode==="colour"){const c=tuyaColour(cur)||{h:0,s:cur.cMax};multi([{code:cur.colour,value:{h:c.h,s:c.s,v:Math.max(10,Math.round(cur.cMax*n/100))}}]);}
+     else multi([{code:d.dimCode,value:tuyaRaw(d,n)}]);};}
+   const c=$("#ct");if(c)c.onchange=()=>{const cmds=[];if(f.mode)cmds.push({code:"work_mode",value:"white"});cmds.push({code:f.temp,value:Math.round(+c.value*f.tempMax/100)});multi(cmds);};
+   const w=$("#white");if(w)w.onclick=()=>multi([{code:"work_mode",value:"white"}]);
+   document.querySelectorAll(".swatches [data-h]").forEach(b=>b.onclick=()=>{const cmds=[];if(f.mode)cmds.push({code:"work_mode",value:"colour"});
+    cmds.push({code:f.colour,value:{h:+b.dataset.h,s:f.cMax,v:Math.max(10,Math.round(f.cMax*(d.st.level||100)/100))}});multi(cmds);});
   });
   return;
  }
@@ -697,6 +799,7 @@ $("#mUse").onclick=()=>{mode="use";if(tab==="ga")tab="dev";render();};
 $("#tDev").onclick=()=>{tab="dev";renderPane();};
 $("#tGa").onclick=()=>{tab="ga";renderPane();};
 $("#tLog").onclick=()=>{tab="log";renderPane();};
+$("#tSch").onclick=()=>{tab="sch";renderPane();};
 
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;}).catch(()=>{})
 .then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();});

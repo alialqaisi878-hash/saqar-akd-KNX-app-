@@ -111,8 +111,10 @@ class TuyaCloud:
                 break
         return out
 
-    async def command(self, device_id: str, code: str, value) -> None:
-        body = {"commands": [{"code": code, "value": value}]}
+    async def command(self, device_id: str, code, value=None) -> None:
+        """code + value, or a list of {"code", "value"} sent together."""
+        cmds = code if isinstance(code, list) else [{"code": code, "value": value}]
+        body = {"commands": cmds}
         try:
             await self.call("POST", f"/v1.0/iot-03/devices/{device_id}/commands", body=body)
         except TuyaError:
