@@ -56,7 +56,7 @@ public class SettingsActivity extends Activity {
         l.addView(save);
 
         Button imp = new Button(this);
-        imp.setText("استيراد مشروع (project.json)");
+        imp.setText("استيراد ملف (config.json أو project.json)");
         imp.setOnClickListener(v -> {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -122,10 +122,22 @@ public class SettingsActivity extends Activity {
         try {
             Uri u = data.getData();
             String txt = Config.readAll(getContentResolver().openInputStream(u));
-            new JSONObject(txt); // must be valid JSON
-            Config.copy(new java.io.ByteArrayInputStream(txt.getBytes("UTF-8")),
-                    new File(Config.dataDir(this), "project.json"));
-            toast("تم استيراد المشروع");
+            JSONObject o = new JSONObject(txt); // must be valid JSON
+            if (o.has("house_id")) {
+                // settings of an existing house (keeps its house_key, so the same link keeps working)
+                o.put("open_browser", false);
+                Config.copy(new java.io.ByteArrayInputStream(o.toString(2).getBytes("UTF-8")), Config.file(this));
+                house.setText(o.optString("house_id"));
+                ip.setText(o.optString("gateway_ip"));
+                pw.setText(o.optString("remote_password"));
+                relay.setText(o.optString("relay_url", Config.DEFAULT_RELAY));
+                updateLink();
+                toast("تم استيراد إعدادات البيت، اضغط حفظ وتشغيل");
+            } else {
+                Config.copy(new java.io.ByteArrayInputStream(txt.getBytes("UTF-8")),
+                        new File(Config.dataDir(this), "project.json"));
+                toast("تم استيراد المشروع");
+            }
         } catch (Exception e) {
             toast("الملف مو مشروع صحيح");
         }
