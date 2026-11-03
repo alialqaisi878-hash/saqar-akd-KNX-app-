@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>خريطة KNX</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+/* Layout: installer workbench. Floor plan on drafting paper takes the stage, a narrow tool rail beside it (stacks under it on phones). */
+:root{
+  --paper:#eef1f4; --sheet:#ffffff; --ink:#18232f; --muted:#5d6b7a; --line:#d3dae2;
+  --accent:#1f5fbf; --accent-ink:#ffffff; --lit:#f2a516; --lit-glow:rgba(242,165,22,.35);
+  --cool:#2a9d8f; --danger:#c2412d; --chip:#e3e9f0;
+  --f-display:"Readex Pro","IBM Plex Sans Arabic",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans Arabic",system-ui,"Segoe UI",Tahoma,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0f151c; --sheet:#17202a; --ink:#e6ecf2; --muted:#93a3b4; --line:#2a3644;
+  --accent:#5b9bff; --accent-ink:#0b1420; --lit:#ffbf3c; --lit-glow:rgba(255,191,60,.3);
+  --cool:#4cc2b2; --danger:#ff7a63; --chip:#223040; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f151c; --sheet:#17202a; --ink:#e6ecf2; --muted:#93a3b4; --line:#2a3644;
+  --accent:#5b9bff; --accent-ink:#0b1420; --lit:#ffbf3c; --lit-glow:rgba(255,191,60,.3);
+  --cool:#4cc2b2; --danger:#ff7a63; --chip:#223040; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;direction:rtl}
+.app{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 32px;max-width:1400px;margin-inline:auto;display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
+.mono{font-family:var(--f-mono);direction:ltr;unicode-bidi:isolate;font-size:.92em}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* top bar */
+.bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-size:1.25rem;font-weight:700;letter-spacing:.2px}
+.brand .tag.ok{background:color-mix(in srgb,var(--cool) 22%,var(--sheet));color:var(--ink)}
+.brand .tag.bad{background:color-mix(in srgb,var(--danger) 18%,var(--sheet));color:var(--danger)}
+.brand .tag{font-size:.75rem;color:var(--muted);background:var(--chip);padding:2px 8px;border-radius:99px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.select{background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0;max-width:220px}
+.btn{background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:7px 12px;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line))}
+.btn.danger.armed{background:var(--danger);color:#fff}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:3px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:7px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--sheet);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12);font-weight:600}
+
+/* workbench */
+.bench{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media (max-width:900px){.bench{grid-template-columns:minmax(0,1fr)}}
+.stagewrap{background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:12px;min-width:0}
+.hint{font-size:.85rem;color:var(--muted);margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint b{color:var(--ink);font-weight:600}
+.stage{position:relative;direction:ltr;width:100%;border-radius:6px;overflow:hidden;
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:24px 24px;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage img{display:block;width:100%;height:auto;pointer-events:none}
+.stage.editing{cursor:crosshair}
+.empty{padding:60px 20px;text-align:center;color:var(--muted);direction:rtl}
+
+/* device markers */
+.dev{position:absolute;transform:translate(-50%,-50%);width:46px;height:46px;border-radius:50%;
+  display:grid;place-items:center;background:var(--sheet);border:2px solid var(--ink);color:var(--ink);
+  box-shadow:0 2px 6px rgba(0,0,0,.18);transition:background .15s,box-shadow .2s,border-color .15s;padding:0}
+.dev svg{width:24px;height:24px}
+.dev.on{background:var(--lit);border-color:var(--lit);color:#2a1a00;box-shadow:0 0 0 8px var(--lit-glow),0 2px 6px rgba(0,0,0,.2)}
+.dev.hvac.on{background:var(--cool);border-color:var(--cool);color:#fff;box-shadow:0 0 0 8px color-mix(in srgb,var(--cool) 30%,transparent)}
+.dev .lvl{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--sheet);padding:0 5px;border-radius:4px;white-space:nowrap}
+.dev .nm{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:11px;white-space:nowrap;background:color-mix(in srgb,var(--sheet) 88%,transparent);padding:0 5px;border-radius:4px;direction:rtl;font-family:var(--f-body)}
+@media (max-width:600px){.dev{width:34px;height:34px}.dev svg{width:18px;height:18px}.dev .nm{display:none}.dev .lvl{bottom:-17px;font-size:10px}.dev.on{box-shadow:0 0 0 5px var(--lit-glow)}}
+[hidden]{display:none!important}
+.editing .dev{border-style:dashed;cursor:grab}
+.dev.dragging{cursor:grabbing;opacity:.85}
+.dev.unbound::after{content:"";position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:var(--danger);border:2px solid var(--sheet)}
+
+/* side rail */
+.rail{background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-width:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;background:none;padding:11px 6px;color:var(--muted);border-bottom:2px solid transparent;font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{padding:12px;display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto}
+.row{display:flex;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sheet);text-align:start;width:100%}
+.row:hover{border-color:var(--accent)}
+.row .ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--chip);flex:none}
+.row .ic svg{width:17px;height:17px}
+.row .tx{min-width:0;flex:1}
+.row .tx div:first-child{font-weight:600}
+.row .tx div:last-child{font-size:.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{font-size:.72rem;padding:1px 7px;border-radius:99px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.pill.on{background:var(--lit);color:#2a1a00}
+.galist{display:flex;flex-direction:column}
+.ga{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:.86rem;align-items:center}
+.ga .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.import{border:1.5px dashed var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:.86rem;color:var(--muted)}
+.log{font-family:var(--f-mono);font-size:12px;direction:ltr;display:flex;flex-direction:column;gap:2px}
+.log div{padding:3px 6px;border-radius:4px;background:var(--paper);display:flex;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .t{color:var(--muted)}
+.log .rx{color:var(--cool)}
+.muted{color:var(--muted);font-size:.86rem}
+.search{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%}
+
+/* sheets */
+.scrim{position:fixed;inset:0;background:rgba(10,16,24,.45);display:grid;place-items:center;z-index:50;padding:16px}
+.sheet{background:var(--sheet);border-radius:14px;width:min(460px,100%);max-height:calc(100% - 20px);overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+@media (max-width:560px){.scrim{place-items:end center;padding:0}.sheet{border-radius:16px 16px 0 0;width:100%;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}}
+.sheet header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sheet h2{font-size:1.1rem}
+.x{border:0;background:var(--chip);width:32px;height:32px;border-radius:50%;flex:none}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:.82rem;color:var(--muted)}
+.field input,.field select{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+.field input.mono{text-align:left}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.types{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.types button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.75rem}
+.types button svg{width:20px;height:20px}
+.types button[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--sheet));color:var(--ink);font-weight:600}
+.actions{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.big{display:flex;gap:10px}
+.big button{flex:1;padding:16px 8px;border-radius:12px;border:1px solid var(--line);background:var(--paper);font-weight:600;font-size:1rem}
+.big button.active{background:var(--lit);border-color:var(--lit);color:#2a1a00}
+.slider{display:flex;flex-direction:column;gap:6px}
+.slider .v{font-family:var(--f-display);font-size:2rem;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.toast{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--sheet);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:60;max-width:calc(100% - 32px)}
+.note{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div class="app" id="app" lang="ar">
+  <div class="bar">
+    <div class="brand">
+      <h1>خريطة KNX</h1><span class="tag" id="connTag">جاري الاتصال…</span>
+    </div>
+    <div class="controls">
+      <select class="select" id="projSel" aria-label="المشروع"></select>
+      <button class="btn" id="newProj">+ مشروع جديد</button>
+      <div class="seg" role="group" aria-label="الوضع">
+        <button id="mEdit" aria-pressed="true">تعديل (الفني)</button>
+        <button id="mUse" aria-pressed="false">استخدام (صاحب البيت)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bench">
+    <section class="stagewrap">
+      <p class="hint" id="hint"></p>
+      <div class="stage" id="stage"></div>
+      <div class="hint" style="margin:10px 0 0" id="planTools">
+        <label class="btn" for="planFile">رفع خريطة (صورة أو PDF)</label>
+        <input type="file" id="planFile" accept="image/*,application/pdf" hidden>
+        <span class="muted" id="planInfo"></span>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tDev" aria-selected="true">الأجهزة</button>
+        <button role="tab" id="tGa" aria-selected="false">عناوين ETS</button>
+        <button role="tab" id="tLog" aria-selected="false">سجل الأوامر</button>
+      </div>
+      <div class="pane" id="pane"></div>
+    </aside>
+  </div>
+</div>
+<div id="layer"></div>
+
+<script>
+(function(){
+"use strict";
+/* ---------- icons ---------- */
+const I={
+ switch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>',
+ dimmer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+ blind:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M4 7h16M4 11h16M4 15h16"/></svg>',
+ hvac:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11"/><path d="M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>',
+ scene:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>'
+};
+const TYPES={
+ switch:{label:"إنارة",fields:[["cmd","أمر تشغيل/إطفاء","1.001"],["status","حالة تشغيل/إطفاء","1.001"]]},
+ dimmer:{label:"ديمر",fields:[["cmd","أمر تشغيل/إطفاء","1.001"],["status","حالة تشغيل/إطفاء","1.001"],["value","قيمة الإضاءة %","5.001"],["valueStatus","حالة القيمة %","5.001"]]},
+ blind:{label:"ستارة",fields:[["updown","فوك/جوه","1.008"],["stop","إيقاف","1.017"],["position","الموقع %","5.001"],["positionStatus","حالة الموقع %","5.001"]]},
+ hvac:{label:"تكييف",fields:[["cmd","تشغيل/إطفاء","1.001"],["setpoint","درجة الضبط","9.001"],["temp","درجة الغرفة","9.001"]]},
+ scene:{label:"سين",fields:[["scene","عنوان السين","17.001"]]}
+};
+
+/* ---------- sample project ---------- */
+function samplePlan(){
+ const W=1000,H=680,wall='stroke="#2b3542" stroke-width="10" stroke-linecap="square" fill="none"';
+ const thin='stroke="#2b3542" stroke-width="3" fill="none"';
+ const lbl=(x,y,t,s)=>`<text x="${x}" y="${y}" font-family="IBM Plex Sans Arabic,Tahoma,sans-serif" font-size="${s||22}" fill="#56606c" text-anchor="middle">${t}</text>`;
+ const door=(x,y,r,a)=>`<path d="M${x} ${y} l${r*Math.cos(a)} ${r*Math.sin(a)}" ${thin}/><path d="M${x+r*Math.cos(a)} ${y+r*Math.sin(a)} A${r} ${r} 0 0 1 ${x+r*Math.cos(a+Math.PI/2)} ${y+r*Math.sin(a+Math.PI/2)}" stroke="#8a95a2" stroke-width="2" stroke-dasharray="5 4" fill="none"/>`;
+ const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+ <rect width="${W}" height="${H}" fill="#fbfcfd"/>
+ <rect x="40" y="40" width="920" height="600" ${wall}/>
+ <path d="M520 40V300M520 380V640" ${wall}/>
+ <path d="M40 360H420M480 360H520" ${wall}/>
+ <path d="M520 330H700M760 330H960" ${wall}/>
+ <path d="M740 330V470M740 540V640" ${wall}/>
+ <path d="M280 360V420M280 480V640" ${wall}/>
+ <rect x="60" y="60" width="80" height="140" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <rect x="150" y="230" width="230" height="90" rx="10" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <rect x="560" y="60" width="380" height="40" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <rect x="620" y="140" width="160" height="80" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <rect x="770" y="420" width="160" height="190" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <rect x="560" y="500" width="150" height="110" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <rect x="320" y="530" width="170" height="80" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ <circle cx="140" cy="560" r="34" fill="#eef1f4" stroke="#b5bec8" stroke-width="2"/>
+ ${door(420,360,60,0)}${door(520,300,80,Math.PI/2)}${door(700,330,60,0)}${door(740,470,70,Math.PI/2)}${door(280,420,60,Math.PI/2)}
+ <path d="M40 140v120" stroke="#7fb2e5" stroke-width="10"/><path d="M960 160v100" stroke="#7fb2e5" stroke-width="10"/><path d="M620 40h140" stroke="#7fb2e5" stroke-width="10"/>
+ ${lbl(280,180,"الصالة",26)}${lbl(740,250,"المطبخ",24)}${lbl(400,460,"غرفة النوم الرئيسية",22)}${lbl(150,460,"الحمام",22)}${lbl(630,450,"الممر",20)}${lbl(850,380,"غرفة النوم ٢",22)}
+ <text x="940" y="665" font-family="IBM Plex Mono,monospace" font-size="14" fill="#8a95a2" text-anchor="end">نموذج · ١٢٠ م²</text>
+ </svg>`;
+ return {src:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg),w:W,h:H};
+}
+function sampleProject(){
+ const p=samplePlan();
+ return {id:"demo",name:"بيت تجريبي · المنصور",plan:p.src,planW:p.w,planH:p.h,sample:true,
+ gas:[
+  ["1/1/1","الصالة إنارة سقف - أمر","1.001"],["1/1/2","الصالة إنارة سقف - حالة","1.001"],
+  ["1/1/3","الصالة سبوت ديمر - أمر","1.001"],["1/1/4","الصالة سبوت ديمر - حالة","1.001"],["1/1/5","الصالة سبوت ديمر - قيمة","5.001"],["1/1/6","الصالة سبوت ديمر - حالة القيمة","5.001"],
+  ["1/2/1","المطبخ إنارة - أمر","1.001"],["1/2/2","المطبخ إنارة - حالة","1.001"],
+  ["1/3/1","غرفة النوم الرئيسية إنارة - أمر","1.001"],["1/3/2","غرفة النوم الرئيسية إنارة - حالة","1.001"],
+  ["2/1/1","ستارة الصالة - فوك/جوه","1.008"],["2/1/2","ستارة الصالة - إيقاف","1.017"],["2/1/3","ستارة الصالة - موقع","5.001"],["2/1/4","ستارة الصالة - حالة الموقع","5.001"],
+  ["3/1/1","سبلت الصالة - تشغيل","1.001"],["3/1/2","سبلت الصالة - درجة الضبط","9.001"],["3/1/3","سبلت الصالة - درجة الغرفة","9.001"],
+  ["4/0/1","سينات البيت","17.001"]
+ ].map(a=>({addr:a[0],name:a[1],dpt:a[2]})),
+ devices:[
+  {id:"d1",name:"سقف الصالة",type:"switch",x:22,y:18,ga:{cmd:"1/1/1",status:"1/1/2"},st:{on:true}},
+  {id:"d2",name:"سبوت الصالة",type:"dimmer",x:40,y:30,ga:{cmd:"1/1/3",status:"1/1/4",value:"1/1/5",valueStatus:"1/1/6"},st:{on:true,level:60}},
+  {id:"d3",name:"ستارة الصالة",type:"blind",x:9,y:29,ga:{updown:"2/1/1",stop:"2/1/2",position:"2/1/3",positionStatus:"2/1/4"},st:{pos:30}},
+  {id:"d4",name:"سبلت الصالة",type:"hvac",x:34,y:10,ga:{cmd:"3/1/1",setpoint:"3/1/2",temp:"3/1/3"},st:{on:false,setpoint:23,temp:27.5}},
+  {id:"d5",name:"المطبخ",type:"switch",x:68,y:30,ga:{cmd:"1/2/1",status:"1/2/2"},st:{on:false}},
+  {id:"d6",name:"غرفة النوم",type:"switch",x:40,y:75,ga:{cmd:"1/3/1",status:"1/3/2"},st:{on:false}},
+  {id:"d7",name:"سين المساء",type:"scene",x:58,y:62,ga:{scene:"4/0/1"},sceneNo:2,st:{}},
+  {id:"d8",name:"غرفة النوم ٢",type:"switch",x:85,y:70,ga:{},st:{on:false}}
+ ]};
+}
+
+/* ---------- state ---------- */
+const KEY="knx-plan-v1";
+let db=load();
+let mode="edit", tab="dev", gaFilter="";
+const log=[];
+function load(){
+ try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.projects&&s.projects.length)return s;}catch(e){}
+ return {projects:[sampleProject()],current:"demo"};
+}
+let saveT;
+function save(){
+ try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){}
+ clearTimeout(saveT);
+ saveT=setTimeout(()=>{fetch("api/project",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(db)}).catch(()=>toast("ما انحفظ على الحاسبة، تأكد إن برنامج الربط شغّال"));},400);
+}
+const P=()=>db.projects.find(p=>p.id===db.current)||db.projects[0];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+function gaName(a){const g=P().gas.find(x=>x.addr===a);return g?g.name:"";}
+
+/* ---------- KNX helpers ---------- */
+function intToGa(n){n=+n;return ((n>>11)&31)+"/"+((n>>8)&7)+"/"+(n&255);}
+function dptFrom(s){if(!s)return"";const m=String(s).split(/[ ,]/)[0].match(/DPS?T-(\d+)(?:-(\d+))?/i);if(!m)return"";return m[2]?m[1]+"."+String(m[2]).padStart(3,"0"):m[1]+".x";}
+function hex(b){return "$"+b.toString(16).toUpperCase().padStart(2,"0");}
+function encode(dpt,v){
+ const main=String(dpt).split(".")[0];
+ if(main==="1")return hex(v?1:0);
+ if(main==="5"){const b=Math.round(v*255/100);return hex(b)+" ("+v+"%)";}
+ if(main==="9")return "2-byte float "+Number(v).toFixed(1)+" °C";
+ if(main==="17"||main==="18")return hex(v-1)+" (سين "+v+")";
+ return String(v);
+}
+function telegram(addr,dpt,v,label,rx){
+ if(!addr){toast("هذا الجهاز ما مربوط بعنوان، اربطه من وضع التعديل");return false;}
+ if(!rx&&live()){ws.send(JSON.stringify({t:"write",ga:addr,dpt:dpt,value:String(dpt).startsWith("1.")?(v?1:0):Number(v)}));}
+ const t=new Date().toLocaleTimeString("en-GB");
+ log.unshift({t,addr,val:encode(dpt,v),label,rx});
+ if(log.length>200)log.pop();
+ if(tab==="log")renderPane();
+ return true;
+}
+function respond(addr,dpt,v,label){ if(addr&&!live())setTimeout(()=>{telegram(addr,dpt,v,label,true);},180); }
+
+/* ---------- live KNX link (via knx_bridge.py) ---------- */
+let ws=null,knxState="connecting";
+const live=()=>ws&&ws.readyState===1&&knxState==="connected";
+function setTag(){
+ const t=$("#connTag");if(!t)return;
+ const m={connected:["متصل بالـ KNX","ok"],connecting:["جاري الاتصال بالـ KNX…",""],disconnected:["انقطع الاتصال بالـ KNX","bad"],error:["ما كدر يتصل بالـ IP Router","bad"],offline:["برنامج الربط مطفي","bad"]}[knxState]||["",""];
+ t.textContent=m[0];t.className="tag "+m[1];
+}
+function statusGas(){const s=new Set();db.projects.forEach(p=>p.devices.forEach(d=>["status","valueStatus","positionStatus","temp","setpoint","cmd"].forEach(k=>{const a=d.ga&&d.ga[k];if(a)s.add(a);})));return [...s];}
+function connect(){
+ ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+location.pathname.replace(/[^/]*$/,"")+"ws");
+ ws.onmessage=e=>{
+  const m=JSON.parse(e.data);
+  if(m.t==="status"){const was=knxState;knxState=m.state;setTag();if(m.state==="connected"&&m.detail==="routing"){const t=$("#connTag");t.textContent="متصل (Routing، غير مؤكد)";t.className="tag";}if(m.state==="error"&&m.detail)toast(m.detail);if(m.state==="connected"&&was!=="connected")ws.send(JSON.stringify({t:"read",gas:statusGas()}));}
+  if(m.t==="tg")incoming(m);
+  if(m.t==="error")toast(m.msg);
+  if(m.t==="remote"&&location.protocol!=="https:"){const t=$("#connTag");if(t){let a=document.getElementById("remoteLink");if(!a){a=document.createElement("a");a.id="remoteLink";a.className="tag";a.target="_blank";a.style.marginInlineStart="6px";t.after(a);}a.href=m.url;a.textContent="🌐 رابط من برة البيت";a.title=m.url;}}
+ };
+ ws.onclose=()=>{knxState="offline";setTag();setTimeout(connect,3000);};
+}
+function f16(b){const raw=(b[0]<<8)|b[1];let m=raw&0x7ff;if(raw&0x8000)m=m-2048;const e=(raw>>11)&0xf;return Math.round(m*Math.pow(2,e))/100;}
+function incoming(m){
+ const val=(dpt)=>{const main=String(dpt).split(".")[0];
+  if(main==="1")return m.bit!=null?!!m.bit:(m.bytes?!!m.bytes[0]:false);
+  if(!m.bytes)return null;
+  if(main==="5")return Math.round(m.bytes[0]*100/255);
+  if(main==="9"&&m.bytes.length>=2)return f16(m.bytes);
+  return null;};
+ let shown="",changed=false;
+ db.projects.forEach(p=>p.devices.forEach(d=>{
+  const g=d.ga||{};
+  TYPES[d.type].fields.forEach(([k,,dpt])=>{
+   if(g[k]!==m.ga)return;const v=val(dpt);if(v==null)return;shown=shown||encode(dpt,dpt.startsWith("1.")?(v?1:0):v);changed=true;
+   if(d.type==="switch"&&(k==="status"||k==="cmd"))d.st.on=v;
+   if(d.type==="dimmer"){if(k==="status"||k==="cmd")d.st.on=v;if(k==="valueStatus"||k==="value"){d.st.level=v;d.st.on=v>0;}}
+   if(d.type==="blind"){if(k==="positionStatus"||k==="position")d.st.pos=v;if(k==="updown")d.st.pos=v?100:0;}
+   if(d.type==="hvac"){if(k==="cmd")d.st.on=v;if(k==="setpoint")d.st.setpoint=v;if(k==="temp")d.st.temp=v;}
+  });
+ }));
+ const t=new Date().toLocaleTimeString("en-GB");
+ log.unshift({t,addr:m.ga,val:shown||(m.bit!=null?hex(m.bit):(m.bytes||[]).map(hex).join(" ")),rx:true});
+ if(log.length>200)log.pop();
+ if(changed){renderStage();}
+ if(tab!=="ga")renderPane();
+}
+
+/* ---------- rendering ---------- */
+function renderTop(){
+ const sel=$("#projSel");
+ sel.innerHTML=db.projects.map(p=>`<option value="${esc(p.id)}"${p.id===P().id?" selected":""}>${esc(p.name)}</option>`).join("");
+ $("#mEdit").setAttribute("aria-pressed",mode==="edit");
+ $("#mUse").setAttribute("aria-pressed",mode==="use");
+ $("#planTools").hidden=mode!=="edit";
+ const p=P();
+ $("#hint").innerHTML=mode==="edit"
+  ? (p.plan?`<b>وضع التعديل:</b> اضغط على أي مكان بالخريطة حتى تضيف جهاز، اسحب الأيقونة حتى تحركها، واضغط عليها حتى تعدلها.`:`<b>ابدأ برفع الخريطة</b> من الزر تحت.`)
+  : `<b>وضع الاستخدام:</b> هيج يشوفها صاحب البيت. اضغط على الأيقونة حتى تتحكم. الأوامر تطلع بسجل الأوامر.`;
+ $("#planInfo").textContent=p.plan?(p.sample?"الخريطة الحالية نموذج للتجربة":"الخريطة مرفوعة · "+p.planW+"×"+p.planH):"";
+}
+function renderStage(){
+ const p=P(),st=$("#stage");
+ st.classList.toggle("editing",mode==="edit");
+ if(!p.plan){st.innerHTML=`<div class="empty">ما بيه خريطة بعد. ارفع صورة أو PDF للبيت.</div>`;return;}
+ st.style.aspectRatio=p.planW+"/"+p.planH;
+ st.innerHTML=`<img src="${p.plan}" alt="خريطة ${esc(p.name)}">`+p.devices.map(markerHtml).join("");
+}
+function isOn(d){return d.type==="blind"?(d.st.pos||0)<100&&(d.st.pos||0)>0?false:false:!!d.st.on;}
+function bound(d){return TYPES[d.type].fields.some(f=>d.ga&&d.ga[f[0]]);}
+function markerHtml(d){
+ let lvl="";
+ if(d.type==="dimmer"&&d.st.on)lvl=`<span class="lvl">${d.st.level||0}%</span>`;
+ if(d.type==="blind")lvl=`<span class="lvl">${d.st.pos||0}%</span>`;
+ if(d.type==="hvac")lvl=`<span class="lvl">${d.st.on?(d.st.setpoint+"°"):"OFF"}</span>`;
+ const on=(d.type==="switch"||d.type==="dimmer"||d.type==="hvac")&&d.st.on;
+ return `<button class="dev ${d.type}${on?" on":""}${bound(d)?"":" unbound"}" data-id="${d.id}" style="left:${d.x}%;top:${d.y}%" aria-label="${esc(d.name)}"><span class="nm">${esc(d.name)}</span>${I[d.type]}${lvl}</button>`;
+}
+function statusText(d){
+ if(d.type==="switch")return d.st.on?"شغّال":"طافي";
+ if(d.type==="dimmer")return d.st.on?(d.st.level||0)+"%":"طافي";
+ if(d.type==="blind")return "مسدودة "+(d.st.pos||0)+"%";
+ if(d.type==="hvac")return d.st.on?"شغّال · "+d.st.setpoint+"°":"طافي · الغرفة "+d.st.temp+"°";
+ return "سين رقم "+(d.sceneNo||1);
+}
+function renderPane(){
+ ["dev","ga","log"].forEach(k=>$("#t"+k[0].toUpperCase()+k.slice(1)).setAttribute("aria-selected",tab===k));
+ const p=P(),pane=$("#pane");
+ if(tab==="dev"){
+  const rows=p.devices.map(d=>{const first=TYPES[d.type].fields.map(f=>d.ga&&d.ga[f[0]]).filter(Boolean)[0];
+   return `<button class="row" data-dev="${d.id}"><span class="ic">${I[d.type]}</span><span class="tx"><div>${esc(d.name)}</div><div>${TYPES[d.type].label} · ${first?`<span class="mono">${esc(first)}</span>`:"<span style='color:var(--danger)'>بدون عنوان</span>"}</div></span><span class="pill${(d.st.on&&d.type!=="scene")?" on":""}">${statusText(d)}</span></button>`;}).join("");
+  pane.innerHTML=(rows||`<p class="muted">ما بيه أجهزة بعد. ${mode==="edit"?"اضغط على الخريطة حتى تضيف أول جهاز.":""}</p>`)+
+   (mode==="edit"?`<p class="note">النقطة الحمرة على الأيقونة تعني إنها ما مربوطة بأي Group Address.</p>`:"");
+ }
+ if(tab==="ga"){
+  const f=gaFilter.trim();
+  const list=p.gas.filter(g=>!f||g.addr.includes(f)||g.name.includes(f));
+  pane.innerHTML=(mode==="edit"?`<div class="import">
+    <div><b style="color:var(--ink)">استيراد من ETS</b><br>ملف المشروع <span class="mono">.knxproj</span> أو ملف عناوين <span class="mono">CSV</span> مصدّر من ETS.</div>
+    <label class="btn primary" for="etsFile" style="align-self:flex-start">اختيار ملف</label>
+    <input type="file" id="etsFile" accept=".knxproj,.csv,.txt,.zip,.xml" hidden>
+    <div id="etsMsg"></div></div>`:"")+
+   `<input class="search" id="gaSearch" placeholder="بحث بالاسم أو العنوان" value="${esc(gaFilter)}">
+   <div class="muted">${p.gas.length} عنوان${f?" · يطابق "+list.length:""}</div>
+   <div class="galist">${list.slice(0,400).map(g=>`<div class="ga"><span class="mono">${esc(g.addr)}</span><span class="n" title="${esc(g.name)}">${esc(g.name)}</span><span class="pill mono">${esc(g.dpt||"–")}</span></div>`).join("")}</div>`;
+  const s=$("#gaSearch");s.oninput=()=>{gaFilter=s.value;const pos=s.selectionStart;renderPane();const n=$("#gaSearch");n.focus();n.setSelectionRange(pos,pos);};
+  const ef=$("#etsFile");if(ef)ef.onchange=()=>ef.files[0]&&importEts(ef.files[0]);
+ }
+ if(tab==="log"){
+  pane.innerHTML=`<p class="muted">كل ضغطة بوضع الاستخدام تطلع هنا بالضبط مثل ما راح تنرسل على الـ KNX (GroupValueWrite). الأوامر هنا تنرسل فعلاً للـ IP Router، والسطور الخضر هي الردود والحالات اللي تجي من المنظومة.</p>`+
+  (log.length?`<div class="log">${log.map(l=>`<div class="${l.rx?"rx":""}"><span class="t">${l.t}</span><span>${l.rx?"← status":"→ write"}</span><b>${esc(l.addr)}</b><span>${esc(l.val)}</span></div>`).join("")}</div>`:`<p class="muted">ما بيه أوامر بعد. حوّل لوضع الاستخدام واضغط على أي أيقونة.</p>`);
+ }
+}
+function render(){renderTop();renderStage();renderPane();}
+
+/* ---------- stage interactions ---------- */
+let drag=null;
+$("#stage").addEventListener("pointerdown",e=>{
+ const p=P();if(!p.plan)return;
+ const b=e.target.closest(".dev");
+ const rect=$("#stage").getBoundingClientRect();
+ if(b){
+  drag={id:b.dataset.id,el:b,sx:e.clientX,sy:e.clientY,moved:false,rect};
+  if(mode==="edit")b.setPointerCapture(e.pointerId);
+  return;
+ }
+ if(mode==="edit"){
+  const x=+((e.clientX-rect.left)/rect.width*100).toFixed(2),y=+((e.clientY-rect.top)/rect.height*100).toFixed(2);
+  editDevice(null,{x,y});
+ }
+});
+$("#stage").addEventListener("pointermove",e=>{
+ if(!drag||mode!=="edit")return;
+ if(Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)>5)drag.moved=true;
+ if(!drag.moved)return;
+ drag.el.classList.add("dragging");
+ const x=Math.min(98,Math.max(2,(e.clientX-drag.rect.left)/drag.rect.width*100));
+ const y=Math.min(97,Math.max(3,(e.clientY-drag.rect.top)/drag.rect.height*100));
+ drag.el.style.left=x+"%";drag.el.style.top=y+"%";drag.x=x;drag.y=y;
+});
+$("#stage").addEventListener("pointerup",()=>{
+ if(!drag)return;const d=P().devices.find(x=>x.id===drag.id);
+ if(drag.moved&&mode==="edit"){d.x=+drag.x.toFixed(2);d.y=+drag.y.toFixed(2);save();drag.el.classList.remove("dragging");}
+ else if(d){mode==="edit"?editDevice(d):operate(d);}
+ drag=null;
+});
+$("#stage").addEventListener("pointercancel",()=>{drag=null;});
+$("#pane").addEventListener("click",e=>{
+ const r=e.target.closest("[data-dev]");if(!r)return;const d=P().devices.find(x=>x.id===r.dataset.dev);
+ mode==="edit"?editDevice(d):operate(d);
+});
+
+/* ---------- sheets ---------- */
+function sheet(html,onMount){
+ const L=$("#layer");L.innerHTML=`<div class="scrim" id="scrim"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+ $("#scrim").addEventListener("click",e=>{if(e.target.id==="scrim")close();});
+ L.querySelectorAll("[data-close]").forEach(b=>b.onclick=close);
+ onMount&&onMount(L.querySelector(".sheet"));
+}
+function close(){$("#layer").innerHTML="";}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")close();});
+let toastT;function toast(m){clearTimeout(toastT);let t=$(".toast");if(!t){t=document.createElement("div");t.className="toast";t.setAttribute("role","status");document.body.appendChild(t);}t.textContent=m;toastT=setTimeout(()=>t.remove(),2600);}
+
+function gaOptions(){return `<datalist id="gaDl">${P().gas.map(g=>`<option value="${esc(g.addr)}">${esc(g.name)}${g.dpt?" · "+esc(g.dpt):""}</option>`).join("")}</datalist>`;}
+function editDevice(d,pos){
+ const isNew=!d;
+ const draft=d?JSON.parse(JSON.stringify(d)):{id:uid(),name:"",type:"switch",x:pos.x,y:pos.y,ga:{},sceneNo:1,st:{on:false,level:0,pos:0,setpoint:22,temp:25}};
+ const draw=()=>{
+  const T=TYPES[draft.type];
+  sheet(`<header><h2>${isNew?"جهاز جديد":"تعديل الجهاز"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+  <div class="field"><label for="fName">الاسم اللي يشوفه صاحب البيت</label><input id="fName" value="${esc(draft.name)}" placeholder="مثلاً: سقف الصالة"></div>
+  <div class="field"><label>النوع</label><div class="types">${Object.keys(TYPES).map(k=>`<button data-type="${k}" aria-pressed="${draft.type===k}">${I[k]}${TYPES[k].label}</button>`).join("")}</div></div>
+  <div class="grid2">${T.fields.map(f=>`<div class="field"><label for="g_${f[0]}">${f[1]} <span class="mono">DPT ${f[2]}</span></label><input id="g_${f[0]}" class="mono" list="gaDl" value="${esc(draft.ga[f[0]]||"")}" placeholder="1/1/1" inputmode="numeric"><small class="muted" id="n_${f[0]}">${esc(gaName(draft.ga[f[0]]))}</small></div>`).join("")}
+  ${draft.type==="scene"?`<div class="field"><label for="fScene">رقم السين</label><input id="fScene" type="number" min="1" max="64" value="${draft.sceneNo||1}"></div>`:""}</div>
+  ${gaOptions()}
+  <div class="actions">${isNew?"<span></span>":`<button class="btn danger" id="del">حذف</button>`}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="ok">حفظ</button></div></div>`,
+  s=>{
+   const grab=()=>{draft.name=$("#fName").value.trim();T.fields.forEach(f=>{const v=($("#g_"+f[0]).value.match(/\d+\/\d+\/\d+/)||[""])[0];draft.ga[f[0]]=v;});const sc=$("#fScene");if(sc)draft.sceneNo=Math.max(1,Math.min(64,+sc.value||1));};
+   s.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{grab();draft.type=b.dataset.type;draw();});
+   T.fields.forEach(f=>{const inp=$("#g_"+f[0]);inp.oninput=()=>{const v=(inp.value.match(/\d+\/\d+\/\d+/)||[""])[0];$("#n_"+f[0]).textContent=gaName(v)||(v?"عنوان مو موجود بملف ETS":"");};});
+   if(isNew)setTimeout(()=>$("#fName").focus(),30);
+   $("#ok").onclick=()=>{grab();if(!draft.name)draft.name=TYPES[draft.type].label;const p=P();
+    if(isNew)p.devices.push(draft);else p.devices[p.devices.findIndex(x=>x.id===draft.id)]=draft;
+    save();close();renderStage();renderPane();toast(isNew?"انضاف الجهاز":"انحفظ");};
+   const del=$("#del");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية للحذف";return;}
+    const p=P();p.devices=p.devices.filter(x=>x.id!==draft.id);save();close();renderStage();renderPane();toast("انحذف الجهاز");};
+  });
+ };
+ draw();
+}
+
+function refresh(){save();renderStage();if(tab!=="ga")renderPane();}
+function operate(d){
+ const g=d.ga||{};
+ if(d.type==="switch"){
+  const v=!d.st.on;if(!telegram(g.cmd,"1.001",v?1:0))return;d.st.on=v;respond(g.status,"1.001",v?1:0);refresh();return;
+ }
+ if(d.type==="scene"){if(!telegram(g.scene,"17.001",d.sceneNo||1))return;toast("انرسل "+d.name);return;}
+ const body=()=>{
+  if(d.type==="dimmer")return `<div class="big"><button id="on" class="${d.st.on?"active":""}">تشغيل</button><button id="off" class="${!d.st.on?"active":""}">إطفاء</button></div>
+   <div class="slider"><div class="v" id="v">${d.st.on?d.st.level:0}%</div><input type="range" id="r" min="0" max="100" step="5" value="${d.st.on?d.st.level:0}" aria-label="الإضاءة"></div>`;
+  if(d.type==="blind")return `<div class="big"><button id="up">▲ فوك</button><button id="stop">■ وكف</button><button id="down">▼ جوه</button></div>
+   <div class="slider"><div class="v" id="v">${d.st.pos}%</div><input type="range" id="r" min="0" max="100" step="5" value="${d.st.pos}" aria-label="الموقع"><div class="muted" style="display:flex;justify-content:space-between"><span>مفتوحة 0%</span><span>مسدودة 100%</span></div></div>`;
+  if(d.type==="hvac")return `<div class="big"><button id="on" class="${d.st.on?"active":""}">تشغيل</button><button id="off" class="${!d.st.on?"active":""}">إطفاء</button></div>
+   <div class="slider"><div class="v" id="v">${d.st.setpoint}°</div><input type="range" id="r" min="16" max="30" step="0.5" value="${d.st.setpoint}" aria-label="درجة الضبط"><div class="muted" style="text-align:center">حرارة الغرفة الحالية ${d.st.temp}°</div></div>`;
+ };
+ sheet(`<header><h2>${esc(d.name)}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>${body()}`,s=>{
+  const r=$("#r"),v=$("#v");
+  const on=$("#on"),off=$("#off");
+  if(on)on.onclick=()=>{if(!telegram(g.cmd,"1.001",1))return;d.st.on=true;if(d.type==="dimmer"&&!d.st.level)d.st.level=100;respond(g.status,"1.001",1);refresh();close();operate(d);};
+  if(off)off.onclick=()=>{if(!telegram(g.cmd,"1.001",0))return;d.st.on=false;respond(g.status,"1.001",0);refresh();close();operate(d);};
+  if(d.type==="dimmer"){r.oninput=()=>v.textContent=r.value+"%";r.onchange=()=>{const n=+r.value;if(!telegram(g.value,"5.001",n))return;d.st.level=n;d.st.on=n>0;respond(g.valueStatus,"5.001",n);refresh();};}
+  if(d.type==="blind"){
+   r.oninput=()=>v.textContent=r.value+"%";
+   r.onchange=()=>{const n=+r.value;if(!telegram(g.position,"5.001",n))return;d.st.pos=n;respond(g.positionStatus,"5.001",n);refresh();};
+   $("#up").onclick=()=>{if(!telegram(g.updown,"1.008",0))return;d.st.pos=0;respond(g.positionStatus,"5.001",0);refresh();r.value=0;v.textContent="0%";};
+   $("#down").onclick=()=>{if(!telegram(g.updown,"1.008",1))return;d.st.pos=100;respond(g.positionStatus,"5.001",100);refresh();r.value=100;v.textContent="100%";};
+   $("#stop").onclick=()=>{telegram(g.stop,"1.017",1);};
+  }
+  if(d.type==="hvac"){r.oninput=()=>v.textContent=r.value+"°";r.onchange=()=>{const n=+r.value;if(!telegram(g.setpoint,"9.001",n))return;d.st.setpoint=n;refresh();};}
+ });
+}
+
+/* ---------- plan upload ---------- */
+$("#planFile").onchange=async e=>{
+ const f=e.target.files[0];if(!f)return;e.target.value="";
+ try{
+  toast("جاري تحميل الخريطة…");
+  let canvas;
+  if(f.type==="application/pdf"||/\.pdf$/i.test(f.name)){
+   if(!window.pdfjsLib)throw new Error("pdf");
+   const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;
+   const page=await pdf.getPage(1);const vp0=page.getViewport({scale:1});
+   const scale=Math.min(4,2000/Math.max(vp0.width,vp0.height));const vp=page.getViewport({scale});
+   canvas=document.createElement("canvas");canvas.width=vp.width;canvas.height=vp.height;
+   const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+   await page.render({canvasContext:ctx,viewport:vp}).promise;
+  }else{
+   const url=URL.createObjectURL(f);const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+   const k=Math.min(1,2000/Math.max(img.naturalWidth,img.naturalHeight));
+   canvas=document.createElement("canvas");canvas.width=Math.round(img.naturalWidth*k);canvas.height=Math.round(img.naturalHeight*k);
+   const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);
+  }
+  const p=P();p.plan=canvas.toDataURL("image/jpeg",0.85);p.planW=canvas.width;p.planH=canvas.height;p.sample=false;
+  save();render();toast("انرفعت الخريطة");
+ }catch(err){toast("ما كدرت أفتح الملف. تأكد إنه صورة أو PDF سليم.");}
+};
+
+/* ---------- ETS import ---------- */
+async function importEts(file){
+ const msg=$("#etsMsg");msg.textContent="جاري القراءة…";
+ let gas=[],encrypted=false;
+ try{
+  if(/\.(csv|txt)$/i.test(file.name)){gas=parseCsv(await file.text());}
+  else if(/\.xml$/i.test(file.name)){const doc=new DOMParser().parseFromString(await file.text(),"application/xml");
+   for(const el of doc.getElementsByTagName("GroupAddress")){let a=el.getAttribute("Address");if(a==null)continue;a=/\//.test(a)?a:intToGa(a);
+    gas.push({addr:a,name:el.getAttribute("Name")||"",dpt:dptFrom(el.getAttribute("DatapointType")||el.getAttribute("DPTs"))});}}
+  else{
+   if(!window.JSZip)throw new Error("zip");
+   const scan=async zip=>{
+    for(const name of Object.keys(zip.files)){
+     const f=zip.files[name];if(f.dir)continue;
+     if(/\.zip$/i.test(name)){try{const inner=await JSZip.loadAsync(await f.async("arraybuffer"));await scan(inner);}catch(e){encrypted=true;}}
+     else if(/(^|\/)\d+\.xml$/i.test(name)&&/P-/i.test(name)){
+      let txt;try{txt=await f.async("string");}catch(e){encrypted=true;continue;}
+      const doc=new DOMParser().parseFromString(txt,"application/xml");
+      for(const el of doc.getElementsByTagName("GroupAddress")){
+       let a=el.getAttribute("Address");if(a==null)continue;a=/\//.test(a)?a:intToGa(a);
+       gas.push({addr:a,name:el.getAttribute("Name")||"",dpt:dptFrom(el.getAttribute("DatapointType"))});
+      }
+     }
+    }
+   };
+   await scan(await JSZip.loadAsync(file));
+  }
+ }catch(e){msg.innerHTML=`<span style="color:var(--danger)">ما كدرت أقرأ الملف.</span>`;return;}
+ if(!gas.length){
+  msg.innerHTML=`<span style="color:var(--danger)">${encrypted?"ملف المشروع محمي بباسورد. من ETS افتح Group Addresses ← Export وصدّرها CSV وارفعها هنا.":"ما لكيت عناوين بالملف."}</span>`;return;
+ }
+ const seen=new Map();gas.forEach(g=>seen.set(g.addr,g));
+ const p=P();const before=p.gas.length;
+ if(p.sample){p.gas=[];}
+ p.gas.forEach(g=>{if(!seen.has(g.addr))seen.set(g.addr,g);});
+ p.gas=[...seen.values()].sort((a,b)=>{const x=a.addr.split("/").map(Number),y=b.addr.split("/").map(Number);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2];});
+ save();renderPane();
+ $("#etsMsg").innerHTML=`<span style="color:var(--cool)">انضافت ${gas.length} عنوان من ${esc(file.name)}</span>`;
+}
+function parseCsv(t){
+ const lines=t.replace(/^﻿/,"").split(/\r?\n/).filter(Boolean);if(!lines.length)return[];
+ const d=[";","\t",","].sort((a,b)=>lines[0].split(b).length-lines[0].split(a).length)[0];
+ const out=[];
+ for(const ln of lines){
+  const cells=ln.split(d).map(c=>c.trim().replace(/^"|"$/g,"").replace(/""/g,'"'));
+  const ai=cells.findIndex(c=>/^\d+\/\d+\/\d+$/.test(c));if(ai<0)continue;
+  const name=cells.slice(0,ai).reverse().find(c=>c&&c!=="-")||cells.slice(ai+1).find(c=>c&&!/^DPS?T/i.test(c)&&!/^\d/.test(c))||"";
+  const dc=cells.find(c=>/^DPS?T-/i.test(c));
+  out.push({addr:cells[ai],name,dpt:dptFrom(dc)});
+ }
+ return out;
+}
+
+/* ---------- top controls ---------- */
+$("#projSel").onchange=e=>{db.current=e.target.value;save();gaFilter="";render();};
+$("#newProj").onclick=()=>{
+ sheet(`<header><h2>مشروع جديد</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+ <div class="field"><label for="pName">اسم الزبون أو البيت</label><input id="pName" placeholder="مثلاً: بيت أبو أحمد · زيونة"></div>
+ <div class="actions"><span></span><div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="pOk">إنشاء</button></div></div>`,()=>{
+  const i=$("#pName");setTimeout(()=>i.focus(),30);
+  const go=()=>{const n=i.value.trim()||"مشروع جديد";const p={id:uid(),name:n,plan:null,planW:0,planH:0,gas:[],devices:[]};db.projects.push(p);db.current=p.id;mode="edit";save();close();render();};
+  $("#pOk").onclick=go;i.onkeydown=e=>{if(e.key==="Enter")go();};
+ });
+};
+$("#mEdit").onclick=()=>{mode="edit";render();};
+$("#mUse").onclick=()=>{mode="use";if(tab==="ga")tab="dev";render();};
+$("#tDev").onclick=()=>{tab="dev";renderPane();};
+$("#tGa").onclick=()=>{tab="ga";renderPane();};
+$("#tLog").onclick=()=>{tab="log";renderPane();};
+
+fetch("api/project").then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else{save();}}).catch(()=>{}).finally(()=>{render();setTag();connect();});
+})();
+</script>
+</body>
+</html>
