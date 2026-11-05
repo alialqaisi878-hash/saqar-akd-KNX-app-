@@ -1085,8 +1085,17 @@ async def bridge_info(_req):
         "knx": status, "relay": relay_state, "link": remote_url["url"],
         "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
         "assistant": ("gemini" if AI_KEY.startswith("AIza") else "claude") if AI_KEY else "local",
+        "app": os.environ.get("KNX_APP_VERSION", ""),
         "ets": {"sessions": ets_sessions["n"], "ready": bool((CFG.get("gateway_ip") or "").strip()) and bool(INSTALLER_PW or REMOTE_PW)},
     })
+
+
+async def request_update(req):
+    """Technician: ask KNX Prog to fetch the newest version (the tablet still shows Android's install prompt)."""
+    if not is_installer(req):
+        return web.json_response({"error": "installer only"}, status=403)
+    (DATA / "update.request").write_text("1")
+    return web.json_response({"ok": True})
 
 
 async def role(req):
@@ -1484,6 +1493,7 @@ async def main() -> None:
         web.get("/tat-{n:(180|192|512)}.png", app_icon),
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
+        web.post("/api/update", request_update),
         web.post("/api/scene", scene_run),
         web.put("/api/scenes", put_scenes),
         web.put("/api/owner", put_owner),

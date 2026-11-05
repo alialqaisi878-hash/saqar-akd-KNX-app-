@@ -1275,6 +1275,7 @@ function mntLinks(){const b=bInfo;if(!b)return `<div class="mlinks dmut">جار�
  return `<div class="mlinks">
  ${it(k.state==="connected","شبكة KNX (IP Router)",(b.gateway?esc(b.gateway)+" · ":"")+(k.state==="connected"?"متصل":"غير متصل"))}
  ${it(r.state==="connected","سيرفر TAT (الوصول من برة البيت)",r.state==="connected"?(b.link?`<a href="${esc(b.link)}" target="_blank" class="ft">${esc(b.link.replace(/^https?:\/\//,""))}</a>`:"متصل"):r.state==="connecting"?"جاري الاتصال…":"غير متصل")}
+ ${it(true,"KNX Prog "+esc(b.app||""),`<button class="dbtn" data-gupd style="margin-top:6px">⬇ تحديث للنسخة الأحدث</button>`)}
  ${it(e.ready,"برمجة ETS عن بعد",e.sessions?`ETS متصل هسه (${e.sessions})`:e.ready?"جاهز: افتح SaqarETS على الحاسبة واكتب رابط البيت وكلمة سر الفني":"يحتاج IP الراوتر وكلمة سر الفني بإعدادات KNX Prog")}
  </div>`;}
 function dashMaint(){
@@ -1305,6 +1306,7 @@ function mntClick(t){let b;const p=P();const q=s=>t.closest(s);const ga=a=>p.gas
  if(b=q("[data-gs]")){const g=ga(b.dataset.gs);const i=document.querySelector(`[data-gx="${g.addr}"]`);const v=i&&i.value.trim();if(v===""||isNaN(+v)){toast("اكتب قيمة رقم");return true;}if(!live()){toast("الـ KNX غير متصل");return true;}telegram(g.addr,gaDptFix(g.dpt),+v,g.name);toast("انرسل "+v+" على "+g.addr);return true;}
  if(b=q("[data-gr]")){if(!live()){toast("الـ KNX غير متصل");return true;}ws.send(JSON.stringify({t:"read",gas:[b.dataset.gr]}));return true;}
  if(q("[data-greadall]")){if(!live()){toast("الـ KNX غير متصل");return true;}const gs=[...document.querySelectorAll("[data-mrow]:not([hidden])")].map(r=>r.dataset.mrow).slice(0,200);ws.send(JSON.stringify({t:"read",gas:gs}));toast("قراءة "+gs.length+" عنوان");return true;}
+ if(q("[data-gupd]")){fetch("api/update",{method:"POST"}).then(r=>toast(r.ok?"انطلب التحديث: يطلع طلب التثبيت على تابلت البيت خلال دقيقة":"ما صار")).catch(()=>toast("ما صار"));return true;}
  if(q("[data-gsave]")){mntSave();renderDash();return true;}
  if(b=q("[data-gdel]")){const a=b.dataset.gdel;const used=p.devices.some(d=>Object.values(d.ga||{}).includes(a));if(!confirm(used?`العنوان ${a} مربوط بجهاز. تحذفه؟`:`تحذف العنوان ${a}؟`))return true;mntSave(true);p.gas=p.gas.filter(x=>x.addr!==a);save();renderDash();return true;}
  if(q("[data-gadd]")){const a=$("#mnA").value.trim(),n=$("#mnN").value.trim(),d=$("#mnD").value.trim()||"1.001";

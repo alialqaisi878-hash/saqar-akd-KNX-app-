@@ -48,6 +48,20 @@ public class ControlActivity extends Activity {
         super.onCreate(b);
         prefs = getSharedPreferences("akd", MODE_PRIVATE);
         if (prefs.getString("url", "").isEmpty()) showSetup(); else showPanel();
+        Updater.check((code, name, err) -> {
+            if (err != null || code <= Updater.localCode(this)) return;
+            runOnUiThread(() -> new android.app.AlertDialog.Builder(this)
+                    .setTitle("نسخة جديدة من TAT SMART")
+                    .setMessage("النسخة " + name + " جاهزة. تريد تحدّث هسه؟")
+                    .setPositiveButton("تحديث", (d, w) -> {
+                        Toast.makeText(this, "جاري التحميل...", Toast.LENGTH_SHORT).show();
+                        Updater.install(this, (c2, n2, e2) -> {
+                            if (e2 != null) runOnUiThread(() -> Toast.makeText(this, "ما كدر يحمّل: " + e2, Toast.LENGTH_LONG).show());
+                        });
+                    })
+                    .setNegativeButton("بعدين", null)
+                    .show());
+        });
     }
 
     private void showSetup() {

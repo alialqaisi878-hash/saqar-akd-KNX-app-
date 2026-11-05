@@ -76,6 +76,19 @@ public class MainActivity extends Activity {
         Button settings = button("الإعدادات (الفني)");
         settings.setOnClickListener(v -> openSettings());
         l.addView(settings);
+        Button upd = button("تحديث KNX Prog (النسخة " + BuildInfo.name(this) + ")");
+        upd.setOnClickListener(v -> {
+            Toast.makeText(this, "جاري الفحص...", Toast.LENGTH_SHORT).show();
+            Updater.check((code, name, err) -> runOnUiThread(() -> {
+                if (err != null) { Toast.makeText(this, "ما يوصل للسيرفر: " + err, Toast.LENGTH_LONG).show(); return; }
+                if (code <= Updater.localCode(this)) { Toast.makeText(this, "عندك آخر نسخة ✓", Toast.LENGTH_LONG).show(); return; }
+                Toast.makeText(this, "جاري تحميل النسخة " + name + "...", Toast.LENGTH_LONG).show();
+                Updater.install(this, (c2, n2, e2) -> {
+                    if (e2 != null) runOnUiThread(() -> Toast.makeText(this, "ما كدر يحمّل: " + e2, Toast.LENGTH_LONG).show());
+                });
+            }));
+        });
+        l.addView(upd);
 
         ScrollView sv = new ScrollView(this);
         sv.setBackgroundColor(Color.parseColor("#0f172a"));

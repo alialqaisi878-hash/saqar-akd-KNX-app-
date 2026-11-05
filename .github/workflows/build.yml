@@ -30,7 +30,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
+      - name: Company signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/tat.jks"
+            echo "TAT_KEYSTORE=$RUNNER_TEMP/tat.jks" >> "$GITHUB_ENV"
+            echo "signing with the company key"
+          else
+            echo "KEYSTORE_B64 secret missing: debug key (updates need uninstall)"
+          fi
       - name: Build
+        env:
+          TAT_KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
@@ -45,10 +58,14 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/SaqarKNX.apk
           cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/TATSMART.apk
           cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/AKDKNX.apk
+          KC=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts); KN=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          TC=$(grep -oP 'versionCode = \K[0-9]+' control/build.gradle.kts); TN=$(grep -oP 'versionName = "\K[^"]+' control/build.gradle.kts)
+          echo "{\"knxprog\":{\"code\":$KC,\"name\":\"$KN\"},\"tatsmart\":{\"code\":$TC,\"name\":\"$TN\"}}" > /tmp/out/version.json
+          cat /tmp/out/version.json
           cd /tmp/out
           git init -q -b apk
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add *.apk
+          git add *.apk version.json
           git commit -q -m "APK from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" apk

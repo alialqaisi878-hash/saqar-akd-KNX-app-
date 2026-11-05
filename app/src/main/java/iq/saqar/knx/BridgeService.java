@@ -76,9 +76,22 @@ public class BridgeService extends Service {
         started = true;
         final Context ctx = getApplicationContext();
         Thread bk = new Thread(() -> {
+            long lastCheck = 0;
             while (true) {
                 Backup.run(ctx);
-                try { Thread.sleep(120_000); } catch (InterruptedException e) { return; }
+                // update: every 6 h, or right away when the technician asks from the maintenance page
+                File req = new File(Config.dataDir(ctx), "update.request");
+                boolean asked = req.exists();
+                if (asked || System.currentTimeMillis() - lastCheck > 6 * 3600_000L) {
+                    lastCheck = System.currentTimeMillis();
+                    req.delete();
+                    Updater.check((code, name, err) -> {
+                        if (err == null && code > Updater.localCode(ctx)) Updater.install(ctx, null);
+                    });
+                }
+                for (int i = 0; i < 24 && !new File(Config.dataDir(ctx), "update.request").exists(); i++) {
+                    try { Thread.sleep(5_000); } catch (InterruptedException e) { return; }
+                }
             }
         }, "knx-backup");
         bk.setDaemon(true);
@@ -97,6 +110,7 @@ public class BridgeService extends Service {
                 env.callAttr("__setitem__", "KNX_BRIDGE_DATA", Config.dataDir(ctx).getAbsolutePath());
                 env.callAttr("__setitem__", "KNX_BRIDGE_WEB", web.getAbsolutePath());
                 env.callAttr("__setitem__", "TZ", java.util.TimeZone.getDefault().getID());
+                env.callAttr("__setitem__", "KNX_APP_VERSION", BuildInfo.name(ctx) + " (" + Updater.localCode(ctx) + ")");
                 PyObject bridge = py.getModule("knx_bridge");
                 while (true) {
                     try {
