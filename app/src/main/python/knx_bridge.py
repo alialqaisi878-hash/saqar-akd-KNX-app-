@@ -26,6 +26,10 @@ from xknx.telegram import GroupAddress, Telegram
 from xknx.telegram.apci import GroupValueRead, GroupValueResponse, GroupValueWrite
 
 try:
+    from solis_cloud import SolisCloud
+except ImportError:  # pragma: no cover
+    SolisCloud = None
+try:
     from tuya_cloud import TuyaCloud, TuyaError
 except ImportError:  # file missing next to the bridge
     TuyaCloud = None
@@ -129,6 +133,203 @@ async def tuya_send(dev_id: str, code, value=None) -> None:
         broadcast({"t": "tuya", "devices": [d]})
     if tuya_kick is not None:  # read the real state back a moment later
         asyncio.get_running_loop().call_later(2.5, tuya_kick.set)
+
+
+# ---------------------------------------------------------------- solar (Solis) + cameras
+# Keys and camera passwords live in integrations.json on the tablet only. They are typed by the
+# installer in the page's settings and are never sent back to any browser.
+INTEG_FILE = DATA / "integrations.json"
+
+
+def load_integ() -> dict:
+    try:
+        d = json.loads(INTEG_FILE.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+INTEG = load_integ()
+solis = None
+solar_state = {"state": "off", "detail": ""}
+solar_data: dict = {}
+solar_kick: asyncio.Event | None = None
+
+
+def make_solis() -> None:
+    global solis
+    sc = INTEG.get("solis") or {}
+    if SolisCloud and sc.get("key_id") and sc.get("secret"):
+        solis = SolisCloud(sc["key_id"], sc["secret"], sc.get("base") or os.environ.get("SOLIS_URL") or "https://www.soliscloud.com:13333")
+        solar_state.update(state="connecting", detail="")
+    else:
+        solis = None
+        solar_state.update(state="off", detail="")
+
+
+async def solar_loop() -> None:
+    global solar_kick, solar_data
+    solar_kick = asyncio.Event()
+    while True:
+        if solis is not None:
+            try:
+                solar_data = await solis.snapshot()
+                solar_state.update(state="connected", detail=solar_data.get("name", ""))
+                broadcast({"t": "solar", "data": solar_data, "state": solar_state})
+            except Exception as err:  # noqa: BLE001
+                solar_state.update(state="error", detail=str(err))
+                log.warning("Solis: %s", err)
+                broadcast({"t": "solar", "data": solar_data, "state": solar_state})
+        # SolisCloud refreshes about every 5 minutes; a minute is plenty while someone is looking
+        try:
+            await asyncio.wait_for(solar_kick.wait(), 60 if clients else 300)
+        except asyncio.TimeoutError:
+            pass
+        solar_kick.clear()
+
+
+async def get_solar(_req):
+    return web.json_response({"configured": solis is not None, "state": solar_state, "data": solar_data})
+
+
+def cam_public(c: dict) -> dict:
+    return {k: c.get(k, "") for k in ("id", "name", "room")}
+
+
+async def get_cameras(_req):
+    return web.json_response({"cameras": [cam_public(c) for c in INTEG.get("cameras", [])]})
+
+
+async def get_integrations(req):
+    if not is_installer(req):
+        return web.json_response({"ok": False}, status=403)
+    sc = INTEG.get("solis") or {}
+    cams = [{**{k: c.get(k, "") for k in ("id", "name", "room", "brand", "host", "port", "channel", "user", "url")},
+             "has_password": bool(c.get("password"))} for c in INTEG.get("cameras", [])]
+    return web.json_response({"solis": {"key_id": sc.get("key_id", ""), "has_secret": bool(sc.get("secret"))},
+                              "cameras": cams, "solar_state": solar_state})
+
+
+async def put_integrations(req):
+    global INTEG
+    if not is_installer(req):
+        return web.json_response({"ok": False}, status=403)
+    data = await req.json()
+    old = INTEG
+    new = dict(old)
+    if isinstance(data.get("solis"), dict):
+        s_in, s_old = data["solis"], old.get("solis") or {}
+        new["solis"] = {"key_id": str(s_in.get("key_id", "")).strip(),
+                        "secret": str(s_in.get("secret") or "").strip() or s_old.get("secret", ""),
+                        "base": s_old.get("base", "")}
+        if not new["solis"]["key_id"]:
+            new["solis"] = {}
+    if isinstance(data.get("cameras"), list):
+        olds = {c.get("id"): c for c in old.get("cameras", [])}
+        cams = []
+        for c in data["cameras"][:32]:
+            if not isinstance(c, dict):
+                continue
+            cid = str(c.get("id") or new_id())
+            pw = str(c.get("password") or "") or olds.get(cid, {}).get("password", "")
+            cams.append({"id": cid, "name": str(c.get("name", ""))[:40] or "كاميرا", "room": str(c.get("room", ""))[:40],
+                         "brand": c.get("brand") if c.get("brand") in ("hik", "dahua", "url") else "hik",
+                         "host": str(c.get("host", "")).strip(), "port": str(c.get("port", "")).strip(),
+                         "channel": str(c.get("channel", "1")).strip() or "1", "user": str(c.get("user", "")).strip(),
+                         "password": pw, "url": str(c.get("url", "")).strip()})
+        new["cameras"] = cams
+    INTEG = new
+    INTEG_FILE.write_text(json.dumps(INTEG, ensure_ascii=False, indent=1), encoding="utf-8")
+    snap_cache.clear()
+    if "solis" in data:
+        make_solis()
+        if solar_kick is not None:
+            solar_kick.set()
+    broadcast({"t": "cameras"})
+    return web.json_response({"ok": True})
+
+
+def cam_url(c: dict) -> str:
+    if c.get("brand") == "url":
+        return c.get("url", "")
+    host = c.get("host", "")
+    if not host:
+        return ""
+    port = c.get("port") or "80"
+    ch = int(re.sub(r"\D", "", str(c.get("channel") or "1")) or 1)
+    if c.get("brand") == "dahua":
+        return f"http://{host}:{port}/cgi-bin/snapshot.cgi?channel={ch}"
+    return f"http://{host}:{port}/ISAPI/Streaming/channels/{ch}01/picture"
+
+
+def _digest_header(chal: str, method: str, url: str, user: str, pw: str) -> str:
+    """HTTP Digest (MD5, qop=auth) as used by Hikvision and Dahua recorders."""
+    from urllib.parse import urlsplit
+    f = dict(re.findall(r'(\w+)="?([^",]*)"?', chal))
+    sp = urlsplit(url)
+    uri = sp.path + ("?" + sp.query if sp.query else "")
+    h = lambda x: hashlib.md5(x.encode()).hexdigest()  # noqa: E731
+    ha1, ha2 = h(f"{user}:{f.get('realm', '')}:{pw}"), h(f"{method}:{uri}")
+    cnonce, nc = os.urandom(8).hex(), "00000001"
+    if "auth" in f.get("qop", ""):
+        resp = h(f"{ha1}:{f.get('nonce', '')}:{nc}:{cnonce}:auth:{ha2}")
+        out = f'Digest username="{user}", realm="{f.get("realm", "")}", nonce="{f.get("nonce", "")}", uri="{uri}", qop=auth, nc={nc}, cnonce="{cnonce}", response="{resp}"'
+    else:
+        resp = h(f"{ha1}:{f.get('nonce', '')}:{ha2}")
+        out = f'Digest username="{user}", realm="{f.get("realm", "")}", nonce="{f.get("nonce", "")}", uri="{uri}", response="{resp}"'
+    if f.get("opaque"):
+        out += f', opaque="{f["opaque"]}"'
+    return out + ", algorithm=MD5"
+
+
+snap_cache: dict = {}
+_cam_http = None
+
+
+async def fetch_snapshot(c: dict) -> bytes:
+    import aiohttp
+    global _cam_http
+    if _cam_http is None or _cam_http.closed:
+        _cam_http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8))
+    url = cam_url(c)
+    if not url:
+        raise ValueError("اكتب IP الكاميرا أو الجهاز")
+    user, pw = c.get("user", ""), c.get("password", "")
+    auth = aiohttp.BasicAuth(user, pw) if user and c.get("brand") == "url" else None
+    async with _cam_http.get(url, auth=auth) as r:
+        if r.status == 401 and user and "digest" in r.headers.get("WWW-Authenticate", "").lower():
+            hdr = _digest_header(r.headers["WWW-Authenticate"], "GET", url, user, pw)
+        elif r.status == 401 and user:
+            hdr = None
+            auth = aiohttp.BasicAuth(user, pw)
+        elif r.status != 200:
+            raise ValueError(f"الكاميرا ردت {r.status}")
+        else:
+            return await r.read()
+    async with _cam_http.get(url, headers={"Authorization": hdr} if hdr else None, auth=None if hdr else auth) as r:
+        if r.status == 401:
+            raise ValueError("اسم المستخدم أو الباسورد مال الكاميرا غلط")
+        if r.status != 200:
+            raise ValueError(f"الكاميرا ردت {r.status}")
+        return await r.read()
+
+
+async def cam_snapshot(req):
+    cid = req.match_info["cid"]
+    c = next((x for x in INTEG.get("cameras", []) if x.get("id") == cid), None)
+    if c is None:
+        raise web.HTTPNotFound()
+    now = time.time()
+    hit = snap_cache.get(cid)
+    if hit and now - hit[0] < 0.8:
+        body = hit[1]
+    else:
+        try:
+            body = await fetch_snapshot(c)
+        except Exception as err:  # noqa: BLE001
+            return web.Response(status=502, text=str(err) or "ما وصلت للكاميرا")
+        snap_cache[cid] = (now, body)
+    return web.Response(body=body, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 # ---------------------------------------------------------------- schedules
@@ -1142,6 +1343,11 @@ async def main() -> None:
         web.get("/api/schedules", get_schedules),
         web.get("/three.js", three_js),
         web.get("/manifest.webmanifest", manifest),
+        web.get("/api/solar", get_solar),
+        web.get("/api/cameras", get_cameras),
+        web.get("/api/cam/{cid}", cam_snapshot),
+        web.get("/api/integrations", get_integrations),
+        web.put("/api/integrations", put_integrations),
         web.get("/tat-{n:(180|192|512)}.png", app_icon),
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
@@ -1169,6 +1375,8 @@ async def main() -> None:
     asyncio.create_task(schedule_loop())
     if tuya is not None:
         asyncio.create_task(tuya_loop())
+    make_solis()
+    asyncio.create_task(solar_loop())
     if (CFG.get("relay_url") or "").strip() and (CFG.get("house_id") or "").strip():
         if not REMOTE_PW:
             log.warning("Set remote_password in config.json, otherwise the fixed link refuses everyone.")

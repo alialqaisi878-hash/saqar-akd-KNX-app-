@@ -301,6 +301,21 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .sol .alert{font-size:.82rem;padding:10px 12px;border-radius:12px;background:rgba(255,192,112,.08);border:1px solid rgba(255,192,112,.25);margin-top:12px}
 .sol .demo{color:var(--d-warm);font-size:.75rem;border:1px solid rgba(255,192,112,.3);border-radius:99px;padding:4px 10px}
 
+/* cameras */
+.camg{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.camt{position:relative;display:block;padding:0;border:1px solid var(--d-line);border-radius:16px;overflow:hidden;background:#060b0a;cursor:pointer;aspect-ratio:16/9;width:100%;color:var(--d-ink);font:inherit}
+.camt img{width:100%;height:100%;object-fit:cover;display:block}
+.camt .cl{position:absolute;inset:auto 0 0 0;padding:8px 12px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);font-size:.85rem;text-align:start}
+.camt .live{position:absolute;top:8px;inset-inline-start:8px;font-size:.68rem;background:rgba(255,80,80,.85);color:#fff;border-radius:6px;padding:2px 6px}
+.camt .ce{position:absolute;inset:0;display:none;place-items:center;color:var(--d-mut);font-size:.8rem;padding:12px;text-align:center}
+.camt.err .ce{display:grid}.camt.err img{opacity:0}
+.camt.big{aspect-ratio:auto;max-height:78vh}.camt.big img{object-fit:contain;max-height:78vh}
+.integ .irow{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--d-line)}
+.integ .irow:first-child{border-top:0}
+.integ label{display:grid;gap:4px;font-size:.72rem;color:var(--d-mut)}
+.integ select{background:#0b1513;border:1px solid var(--d-line);border-radius:10px;color:var(--d-ink);padding:8px;font:inherit}
+.integ .prev{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#060b0a;border:1px solid var(--d-line)}
+.integ .st{font-size:.78rem;color:var(--d-mut)}.integ .st.ok{color:var(--d-acc)}.integ .st.bad{color:#ff8a8a}
 .setrow{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--d-line)}.setrow:last-child{border:0}
 .setin{flex:1;min-width:0;background:#0b1513;border:1px solid var(--d-line);border-radius:10px;color:var(--d-ink);padding:8px 10px;font:inherit}
 .fav{width:34px;height:34px;border-radius:10px;border:1px solid var(--d-line);background:none;color:var(--d-mut);cursor:pointer;display:grid;place-items:center;flex:none}.fav svg{width:18px;height:18px}
@@ -564,6 +579,8 @@ function connect(){
   if(m.t==="tuya"){m.devices.forEach(x=>tuyaSt[x.id]=x);tuyaApply();renderStage();if(tab==="dev")renderPane();}
   if(m.t==="project")reloadProject();
   if(m.t==="schedules"){schedules=null;if(tab==="sch")renderPane();}
+  if(m.t==="solar"){solarLive={configured:true,state:m.state,data:m.data};if(dashOn&&dpage==="solar")renderDash();}
+  if(m.t==="cameras"){camList=null;if(dashOn&&dpage==="cams")renderDash();}
   if(m.t==="status"&&dashOn)renderDash();
   if(m.t==="tuya_err"&&role.installer)toast("تويا: "+m.msg);
   if(m.t==="error")toast(m.msg);
@@ -979,7 +996,8 @@ function dashSettings(){
   ${br.logo?`<img src="${br.logo}" alt="" style="height:56px;max-width:120px;object-fit:contain;background:rgba(255,255,255,.04);border-radius:10px;padding:6px">`:""}
   <label class="dbtn">رفع الشعار<input type="file" accept="image/*" hidden data-logo="1"></label>
   <input class="setin" data-brand="1" value="${esc(br.name||"")}" placeholder="اسم الشركة يطلع بالواجهة" style="flex:1;min-width:180px">
-  <button class="dbtn p" data-savebrand="1">حفظ</button></div>`:""}`;
+  <button class="dbtn p" data-savebrand="1">حفظ</button></div>
+  <div class="dsec">الربط: الطاقة الشمسية والكاميرات (للفني)</div>${integHtml()}`:""}`;
 }
 function ownerSave(){
  const p=P();const body={project:p.id,devices:{}};p.devices.forEach(d=>body.devices[d.id]={name:d.name,fav:!!d.fav,ord:d.ord??null});
@@ -1068,13 +1086,15 @@ function solChart(){
  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="الإنتاج والاستهلاك خلال اليوم">${g}</svg>`;
 }
 function dashSolar(){
- const s=SOL[solMode],rules=Object.assign({},P().solarRules);
+ const live=solarLive&&solarLive.data&&solarLive.data.pv!=null,ld=live?solarLive.data:null;
+ const s=live?solFromLive(ld):SOL[solMode],rules=Object.assign({},P().solarRules);
+ const td=live?ld.today||{}:{pv:31.6,load:22.9,buy:1.4};const fx=v=>v==null?"–":(+v).toFixed(1);
  const fl=(k,d,c)=>`<path class="fl${s.on[k]?"":" off"}${s.rev[k]?" rev":""}" d="${d}" stroke="${c}"/>`;
  const node=(cx,cy,r,c,em)=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#15241f" stroke="${c}" stroke-width="1.5"/><text x="${cx}" y="${cy+7}" font-size="${r>23?20:17}">${em}</text>`;
  return `<div class="sol">
  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
-  <div class="seg" role="group" aria-label="جرّب حالة">${[["day","☀️ نهار"],["out","⚡ انقطعت الوطنية"],["night","🌙 ليل"]].map(([k,n])=>`<button data-solm="${k}" aria-pressed="${solMode===k}">${n}</button>`).join("")}</div>
-  <span class="demo">انفرتر Solis · بيانات تجريبية لحد الربط</span></div>
+  ${live?`<span class="dmut" style="font-size:.8rem">🟢 متصل بـ SolisCloud${ld.name?" · "+esc(ld.name):""}${ld.updated?" · آخر تحديث "+esc(solTime(ld.updated)):""}</span>`:`<div class="seg" role="group" aria-label="جرّب حالة">${[["day","☀️ نهار"],["out","⚡ انقطعت الوطنية"],["night","🌙 ليل"]].map(([k,n])=>`<button data-solm="${k}" aria-pressed="${solMode===k}">${n}</button>`).join("")}</div>`}
+  ${live?"":`<span class="demo">${solarLive&&solarLive.configured&&solarLive.state&&solarLive.state.state==="error"?"⚠️ "+esc(solarLive.state.detail):"انفرتر Solis · بيانات تجريبية لحد الربط"}</span>`}</div>
  <div class="g2">
   <section class="sc"><div class="sh"><b>مسار الطاقة الآن</b><span>${s.note}</span></div>
    <svg class="flow" viewBox="0 0 400 290" role="img" aria-label="مخطط مسار الطاقة">
@@ -1087,35 +1107,103 @@ function dashSolar(){
      ${node(76,252,22,"#c9a2ff","🏭")}<text x="140" y="250" fill="#8fa8a0">الوطنية</text><text class="ft" x="140" y="268" fill="#c9a2ff" font-size="13" font-weight="600">${s.grid}</text>
      ${node(324,252,22,"#ff8f70","⛽")}<text x="262" y="250" fill="#8fa8a0">المولدة</text><text x="262" y="268" fill="#ff8f70" font-size="13" font-weight="600">${s.gen}</text>
     </g></svg></section>
-  <section class="sc"><div class="sh"><b>البطارية</b><span>LiFePO4 · 15 kWh</span></div>
+  <section class="sc"><div class="sh"><b>البطارية</b><span>${live?"":"LiFePO4 · 15 kWh"}</span></div>
    <div class="bat"><div class="bbox"><div class="bfill" style="height:${s.bat}%"></div></div>
-    <div class="binfo"><div class="big">${s.bat}%</div><div>${s.state}</div><div>${s.time}</div><div>تكفي البيت لحد <b style="color:var(--d-ink)">${s.until}</b> بالاستهلاك الحالي</div></div></div>
+    <div class="binfo"><div class="big">${s.bat}%</div><div>${s.state}</div>${s.time?`<div>${s.time}</div>`:""}${s.until?`<div>تكفي البيت لحد <b style="color:var(--d-ink)">${s.until}</b> بالاستهلاك الحالي</div>`:""}</div></div>
    ${s.alert?`<div class="alert">⚠️ ${s.alert}</div>`:""}</section>
  </div>
  <div class="tiles">
-  <div class="tl"><div class="k">إنتاج اليوم</div><div class="v">31.6<small>kWh</small></div></div>
-  <div class="tl"><div class="k">استهلاك اليوم</div><div class="v">22.9<small>kWh</small></div></div>
-  <div class="tl"><div class="k">من الوطنية اليوم</div><div class="v">1.4<small>kWh</small></div></div>
-  <div class="tl"><div class="k">وفّرت هذا الشهر</div><div class="v">184,000<small>د.ع</small></div></div>
+  <div class="tl"><div class="k">إنتاج اليوم</div><div class="v">${fx(td.pv)}<small>kWh</small></div></div>
+  <div class="tl"><div class="k">استهلاك اليوم</div><div class="v">${fx(td.load)}<small>kWh</small></div></div>
+  <div class="tl"><div class="k">من الوطنية اليوم</div><div class="v">${fx(td.buy)}<small>kWh</small></div></div>
+  ${live?`<div class="tl"><div class="k">شحن البطارية اليوم</div><div class="v">${fx(td.charge)}<small>kWh</small></div></div>`:`<div class="tl"><div class="k">وفّرت هذا الشهر</div><div class="v">184,000<small>د.ع</small></div></div>`}
  </div>
  <div class="g2">
-  <section class="sc chart"><div class="sh"><b>اليوم ساعة بساعة</b><span>kW</span></div>${solChart()}
-   <div class="lg"><span><i style="background:#ffc070"></i>إنتاج الألواح</span><span><i style="background:#3fd0b0"></i>استهلاك البيت</span></div></section>
+  <section class="sc chart"><div class="sh"><b>اليوم ساعة بساعة</b><span>kW</span></div>${live?`<div class="dempty">الرسم ساعة بساعة من SolisCloud ينضاف بالنسخة الجاية.</div>`:solChart()}
+   ${live?"":`<div class="lg"><span><i style="background:#ffc070"></i>إنتاج الألواح</span><span><i style="background:#3fd0b0"></i>استهلاك البيت</span></div>`}</section>
   <section class="sc"><div class="sh"><b>أتمتة وية KNX</b><span>تشتغل لحالها</span></div>
    ${SOL_RULES.map(([k,ic,t,sub,def])=>`<div class="rule"><div class="ic">${ic}</div><div class="tx">${t}<small>${sub}</small></div>${(on=>`<button class="tgl${on?" on":""}" data-solr="${k}" aria-pressed="${on}" aria-label="تفعيل"><i></i></button>`)(k in rules?rules[k]:def)}</div>`).join("")}
   </section>
  </div></div>`;
 }
 
-const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["scenes","المشاهد","scenes"],["map","الخريطة","map"],["settings","الإعدادات","gear"]];
+// live Solis numbers (bridge /api/solar, pushed as {"t":"solar"})
+let solarLive=null;
+async function loadSolar(){try{solarLive=await fetch("api/solar").then(r=>r.json());if(dpage==="solar")renderDash();}catch(e){}}
+function solTime(t){const n=+t;if(n>1e11)return new Date(n).toLocaleTimeString("ar-IQ",{hour:"2-digit",minute:"2-digit"});return String(t).slice(-8,-3)||String(t);}
+function solFromLive(d){
+ const kw=v=>`⁦${(Math.abs(v||0)).toFixed(1)} kW⁩`,on=v=>Math.abs(v||0)>0.05;
+ const bat=d.battery||0,grid=d.grid||0,soc=Math.round(d.soc||0);
+ let note=on(d.pv)?(on(bat)&&bat>0?"الشمس تشغّل البيت وتشحن البطارية":"الشمس تشغّل البيت"):(bat<0?"البطارية تشغّل البيت":"البيت على الوطنية");
+ if(grid<-0.05)note+=" · ساحب من الوطنية";else if(grid>0.05)note+=" · يصدّر للوطنية";
+ return {pv:(d.pv||0).toFixed(1),home:(d.load||0).toFixed(1),bat:soc,dir:bat>0.05?"↑":bat<-0.05?"↓":"",
+  grid:on(grid)?`${Math.abs(grid).toFixed(1)} kW`:"0 kW",gen:on(d.gen)?`${(+d.gen).toFixed(1)} kW`:"مطفية",note,
+  state:bat>0.05?"تشحن بـ "+kw(bat):bat<-0.05?"تفرّغ بـ "+kw(bat):"واكفة",time:"",until:"",
+  on:{pv:on(d.pv),home:on(d.load),bat:on(bat),grid:on(grid),gen:on(d.gen)},rev:{bat:bat<0,grid:grid<0},alert:d.online===false?"الانفرتر غير متصل بـ SolisCloud هسة.":""};
+}
+// cameras
+let camList=null,camBig=null,camTick=Date.now();
+async function loadCams(){try{camList=(await fetch("api/cameras").then(r=>r.json())).cameras||[];}catch(e){camList=[];}}
+function camTile(c,big){return `<button class="camt${big?" big":""}" data-cam="${esc(c.id)}"><img data-camimg="${esc(c.id)}" src="api/cam/${encodeURIComponent(c.id)}?t=${camTick}" alt="${esc(c.name)}" onerror="this.parentNode.classList.add('err')" onload="this.parentNode.classList.remove('err')"><span class="live">● مباشر</span><span class="ce">ما وصلت للكاميرا. تأكد من الـ IP والباسورد</span><span class="cl">${esc(c.name)}${c.room?" · "+esc(c.room):""}</span></button>`;}
+function dashCams(){
+ if(camList===null){loadCams().then(()=>{if(dpage==="cams")renderDash();});return `<div class="dempty">جاري التحميل…</div>`;}
+ if(!camList.length)return `<div class="dempty">ما اكو كاميرات بعد. الفني يضيفها من الإعدادات ← الربط.</div>`;
+ const big=camBig&&camList.find(c=>c.id===camBig);
+ if(big)return `${camTile(big,true)}<p class="dmut" style="margin-top:8px">اضغط على الصورة حتى ترجع لكل الكاميرات.</p>`;
+ return `<div class="camg">${camList.map(c=>camTile(c)).join("")}</div>`;
+}
+setInterval(()=>{if(!dashOn||dpage!=="cams"||document.hidden)return;camTick=Date.now();
+ document.querySelectorAll("img[data-camimg]").forEach(img=>{const n=new Image();n.onload=()=>{img.src=n.src;img.parentNode.classList.remove("err");};n.onerror=()=>img.parentNode.classList.add("err");n.src="api/cam/"+encodeURIComponent(img.dataset.camimg)+"?t="+camTick;});},1500);
+// installer: Solis keys + cameras (passwords stay on the tablet)
+let integ=null,integMsg="";
+async function loadInteg(){try{const r=await fetch("api/integrations");integ=r.ok?await r.json():null;}catch(e){integ=null;}if(integ){integ.cameras=integ.cameras||[];}if(dpage==="settings")renderDash();}
+function readInteg(){if(!integ)return;const g=(sel)=>{const e=document.querySelector(sel);return e?e.value.trim():"";};
+ integ.solis=Object.assign({},integ.solis,{key_id:g("[data-sk=id]"),secret:g("[data-sk=secret]")});
+ integ.cameras=[...document.querySelectorAll("[data-camrow]")].map(row=>{const o={};row.querySelectorAll("[data-cf]").forEach(i=>o[i.dataset.cf]=i.value.trim());o.id=row.dataset.camrow;o.has_password=row.dataset.haspw==="1";return o;});}
+async function saveInteg(){readInteg();integMsg="جاري الحفظ…";
+ const body={solis:{key_id:integ.solis.key_id,secret:integ.solis.secret},cameras:integ.cameras.map(c=>({id:c.id,name:c.name,room:c.room,brand:c.brand,host:c.host,port:c.port,channel:c.channel,user:c.user,password:c.password||"",url:c.url}))};
+ try{const r=await fetch("api/integrations",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!r.ok)throw 0;toast("انحفظ");integMsg="";camList=null;await loadInteg();setTimeout(()=>{loadInteg();loadSolar();},4000);}
+ catch(e){integMsg="ما انحفظ";renderDash();}}
+let integLoading=false;
+function integHtml(){
+ if(!integ&&!integLoading){integLoading=true;loadInteg().finally(()=>{integLoading=false;});}
+ if(!integ)return `<div class="dcard" style="min-height:0"><span class="dmut">جاري التحميل…</span></div>`;
+ const so=integ.solis||{},st=integ.solar_state||{};const rooms=roomsOf();
+ const stTx=st.state==="connected"?`<span class="st ok">🟢 متصل${st.detail?" · "+esc(st.detail):""}</span>`:st.state==="error"?`<span class="st bad">⚠️ ${esc(st.detail)}</span>`:st.state==="connecting"?`<span class="st">جاري الاتصال…</span>`:`<span class="st">مو مربوط</span>`;
+ return `<div class="dcard integ" data-keep="1" style="min-height:0">
+  <b>انفرتر Solis (SolisCloud)</b>
+  <p class="dmut" style="margin:4px 0 8px;font-size:.78rem">من SolisCloud: Basic Settings ← API Management ← فعّل، وانسخ KeyID و KeySecret هنا. ينحفظن على تابليت البيت بس.</p>
+  <div class="irow"><label>KeyID<input class="setin" data-sk="id" value="${esc(so.key_id||"")}" autocomplete="off" dir="ltr"></label>
+   <label>KeySecret<input class="setin" data-sk="secret" type="password" value="${esc(so.secret||"")}" placeholder="${so.has_secret?"محفوظ، اتركه فارغ":""}" autocomplete="new-password" dir="ltr"></label>${stTx}</div>
+ </div>
+ <div class="dcard integ" data-keep="1" style="min-height:0;margin-top:12px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>الكاميرات</b><button class="dbtn" data-addcam="1">+ كاميرا</button></div>
+  <p class="dmut" style="margin:4px 0 8px;font-size:.78rem">Hikvision و Dahua: IP الجهاز (NVR أو الكاميرا) ورقم القناة واسم المستخدم والباسورد. غيرها: رابط صورة JPEG.</p>
+  ${integ.cameras.map((c,i)=>`<div class="irow" data-camrow="${esc(c.id||"")}" data-haspw="${c.has_password?1:0}">
+   <label>الاسم<input class="setin" data-cf="name" value="${esc(c.name)}"></label>
+   <label>الغرفة<input class="setin" data-cf="room" value="${esc(c.room)}" list="roomList"></label>
+   <label>النوع<select data-cf="brand">${[["hik","Hikvision"],["dahua","Dahua"],["url","رابط صورة"]].map(([k,n])=>`<option value="${k}"${c.brand===k?" selected":""}>${n}</option>`).join("")}</select></label>
+   ${c.brand==="url"?`<label style="grid-column:span 2">رابط الصورة<input class="setin" data-cf="url" value="${esc(c.url)}" dir="ltr" placeholder="http://192.168.1.64/snapshot.jpg"></label>`:
+   `<label>IP<input class="setin" data-cf="host" value="${esc(c.host)}" dir="ltr" placeholder="192.168.1.64"></label><label>المنفذ<input class="setin" data-cf="port" value="${esc(c.port||"80")}" dir="ltr"></label><label>القناة<input class="setin" data-cf="channel" value="${esc(c.channel||"1")}" dir="ltr"></label>`}
+   <label>المستخدم<input class="setin" data-cf="user" value="${esc(c.user)}" dir="ltr" autocomplete="off"></label>
+   <label>الباسورد<input class="setin" data-cf="password" type="password" value="${esc(c.password||"")}" placeholder="${c.has_password?"محفوظ":""}" autocomplete="new-password" dir="ltr"></label>
+   ${c.id?`<img class="prev" src="api/cam/${encodeURIComponent(c.id)}?t=${Date.now()}" alt="" onerror="this.style.opacity=.2">`:`<span class="st">احفظ حتى تشوف الصورة</span>`}
+   <button class="dbtn" data-delcam="${i}">حذف</button></div>`).join("")||`<span class="dmut">ما اكو كاميرات.</span>`}
+  <datalist id="roomList">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist>
+ </div>
+ <div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="dbtn p" data-saveinteg="1">حفظ الربط</button><span class="dmut">${esc(integMsg)}</span></div>`;
+}
+
+const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["scenes","المشاهد","scenes"],["map","الخريطة","map"],["settings","الإعدادات","gear"]];
 function renderDash(){
  const el=$("#dash");if(!el)return;el.hidden=!dashOn;$("#dashBack").hidden=dashOn;if(!dashOn)return;
  const a=document.activeElement;if(a&&el.contains(a)&&(a.type==="range"||a.tagName==="TEXTAREA")&&dpage!=="ai")return;
+ if(a&&el.contains(a)&&a.closest&&a.closest("[data-keep]")&&a.matches("input,select"))return;
  const draft=$("#chatIn")?$("#chatIn").value:"";
  const p=P(),now=new Date();const hr=now.getHours();const greet=hr<12?"صباح الخير":hr<18?"أهلاً":"مساء الخير";
- const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",scenes:"المشاهد",ai:"مساعد البيت"};
+ const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",scenes:"المشاهد",ai:"مساعد البيت"};
  const body={home:dashHome,rooms:dashRooms,room:dashRoom,light:()=>grouped(p.devices.filter(isLight))+(p.devices.some(isPlug)?`<div class="dsec">مفاتيح وقواطع ذكية</div>`+tilesHtml(p.devices.filter(isPlug)):""),
-  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,scenes:dashScenes,ai:dashChat,settings:dashSettings}[dpage]||dashHome;
+  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,cams:dashCams,scenes:dashScenes,ai:dashChat,settings:dashSettings}[dpage]||dashHome;
  const lightsOn=p.devices.filter(d=>isLight(d)&&d.st.on).length;
  const br=p.brand||{};
  el.innerHTML=`<nav class="dside"><div class="dbrand">${br.logo?`<img src="${br.logo}" alt="" style="height:34px;max-width:60px;object-fit:contain">`:DI.home}<span>${esc(br.name||p.name||"البيت")}</span></div>
@@ -1138,7 +1226,7 @@ function dashClick(e){
  if(b=q("[data-blstop]")){const d=P().devices.find(x=>x.id===b.dataset.blstop);telegram((d.ga||{}).stop,"1.017",1);return;}
  if(b=q("[data-adv]")){const d=P().devices.find(x=>x.id===b.dataset.adv);operate(d);return;}
  if(q("[data-noopen]")){return;}
- if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;renderDash();return;}
+ if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar")loadSolar();if(k==="settings"&&role.installer)loadInteg();renderDash();return;}
  if(b=q("#dLock")){$("#instBtn").click();return;}
  if(b=q("[data-go]")){dpage=b.dataset.go;renderDash();return;}
  if(b=q("[data-room]")){if(!b.dataset.room)return;droom=b.dataset.room;dpage="room";renderDash();return;}
@@ -1151,6 +1239,10 @@ function dashClick(e){
  if(b=q("[data-sp]")){const d=P().devices.find(x=>x.id===b.dataset.sp);const v=Math.max(16,Math.min(30,(d.st.setpoint||22)+ +b.dataset.d));devSetpoint(d,v);refresh();renderDash();return;}
  if(b=q("[data-tg]")){const d=P().devices.find(x=>x.id===b.dataset.tg);devSet(d,!d.st.on);refresh();renderDash();return;}
  if(b=q("[data-roomoff2]")){P().devices.filter(d=>d.room===b.dataset.roomoff2&&d.st.on&&d.type!=="scene").forEach(d=>devSet(d,false));refresh();renderDash();return;}
+ if(b=q("[data-cam]")){camBig=camBig===b.dataset.cam?null:b.dataset.cam;renderDash();return;}
+ if(b=q("[data-addcam]")){integ.cameras.push({id:"",name:"كاميرا "+(integ.cameras.length+1),room:"",brand:"hik",host:"",port:"80",channel:String(integ.cameras.length+1),user:"admin",url:""});renderDash();return;}
+ if(b=q("[data-delcam]")){readInteg();integ.cameras.splice(+b.dataset.delcam,1);renderDash();return;}
+ if(b=q("[data-saveinteg]")){saveInteg();return;}
  if(b=q("[data-solm]")){solMode=b.dataset.solm;renderDash();return;}
  if(b=q("[data-solr]")){const p=P();p.solarRules=Object.assign({},p.solarRules);const v=b.getAttribute("aria-pressed")!=="true";p.solarRules[b.dataset.solr]=v;b.setAttribute("aria-pressed",v);b.classList.toggle("on",v);save();return;}
  if(b=q("[data-newscene]")){editScene(null);return;}
@@ -1159,6 +1251,7 @@ function dashClick(e){
 }
 function dashChange(e){
  const t=e.target;
+ if(t.dataset.cf==="brand"){readInteg();if(document.activeElement)document.activeElement.blur();renderDash();return;}
  if(t.dataset.saver){try{localStorage.setItem("knx-saver",t.checked?"1":"0");}catch(_){}toast("يتطبق بعد إعادة فتح الصفحة");return;}
  if(t.dataset.logo&&t.files[0]){const f=t.files[0];const url=URL.createObjectURL(f);const img=new Image();img.onload=()=>{const k=Math.min(1,300/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);const p=P();p.brand=Object.assign({},p.brand,{logo:c.toDataURL("image/png")});save();renderDash();toast("انرفع الشعار");};img.src=url;return;}
  if(t.dataset.lv){const d=P().devices.find(x=>x.id===t.dataset.lv);if(d.type==="dimmer"&&+t.value>0&&!d.st.on)devSet(d,true);devLevel(d,+t.value);refresh();t.blur();renderDash();}
