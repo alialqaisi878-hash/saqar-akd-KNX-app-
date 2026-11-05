@@ -13,7 +13,7 @@ import os
 
 API_URL = os.environ.get("ANTHROPIC_API_URL") or "https://api.anthropic.com/v1/messages"
 
-SYSTEM = """أنت مساعد البيت الذكي لشركة صقر (AKD) لأنظمة KNX. تحچي باللهجة العراقية، قصير وواضح.
+SYSTEM = """أنت مساعد البيت الذكي لشركة TAT لأنظمة KNX. تحچي باللهجة العراقية، قصير وواضح.
 عندك أدوات تقرأ البيت وتتحكم بالأجهزة وتبرمج المشاهد والمواعيد{inst}.
 قواعد:
 - اقرأ البيت بـ get_house قبل أي تعديل، واستخدم أرقام الأجهزة (id) الموجودة فقط.
@@ -77,6 +77,29 @@ TOOLS_ALL = [
                                                        "devices": {"type": "array", "items": {"type": "string"}}},
                       "required": ["enabled"]}},
 ]
+SYSTEM_SCENES = """أنت مصمم المشاهد بتطبيق TAT SMART. تحچي باللهجة العراقية، قصير وواضح.
+شغلك بس تسوي وتعدّل وتحذف وتشغّل المشاهد لصاحب البيت. ما تتحكم بالأجهزة مباشرة وما تبرمج مواعيد أو أجهزة.
+- اقرأ البيت بـ get_house أول، واستخدم أرقام الأجهزة (id) الموجودة فقط.
+- المشهد: اسم، أيقونة (sofa استقبال، film سينما، lotus استرخاء، moon نوم، sun صباح، dinner عشاء، door خروج، star غيرها)، وقائمة أجهزة كل واحد on true/false مع level للإضاءة 0-100، position للستارة (0 مفتوحة، 100 مسدودة)، setpoint للتكييف.
+- إذا الطلب مو واضح أي غرف أو أجهزة، اقترح مشهد معقول من أجهزة البيت واحفظه، وبعدين كول شنو بيه بسطرين.
+- إذا طلب شي غير المشاهد، كول بلطف إنك تسوي مشاهد بس، والباقي من التطبيق أو الفني."""
+SCENE_TOOL_NAMES = ("get_house", "save_scene", "delete_scene", "run_scene")
+
+
+def tools_for(installer: bool, mode: str) -> list:
+    if mode == "scenes":
+        return [t for t in TOOLS_ALL if t["name"] in SCENE_TOOL_NAMES]
+    return TOOLS_ALL + (TOOLS_INSTALLER if installer else [])
+
+
+def system_for(installer: bool, mode: str) -> str:
+    if mode == "scenes":
+        return SYSTEM_SCENES
+    return SYSTEM.format(
+        inst=" والأجهزة نفسها" if installer else "",
+        role_note="المستخدم هو الفني، يكدر يضيف ويعدّل الأجهزة." if installer else
+        "المستخدم صاحب البيت: ما يكدر يضيف أو يحذف أجهزة KNX، إذا طلب هذا كله يتواصل ويا الفني.")
+
 TOOLS_INSTALLER = [
     {"name": "save_device", "description": "(للفني) إضافة أو تعديل جهاز KNX أو تويا ببرمجة البيت.", "input_schema": DEVICE_SCHEMA},
     {"name": "delete_device", "description": "(للفني) حذف جهاز من البيت.",
@@ -84,12 +107,9 @@ TOOLS_INSTALLER = [
 ]
 
 
-async def chat(api_key: str, model: str, messages: list, ctx, installer: bool) -> dict:
-    tools = TOOLS_ALL + (TOOLS_INSTALLER if installer else [])
-    system = SYSTEM.format(
-        inst=" والأجهزة نفسها" if installer else "",
-        role_note="المستخدم هو الفني، يكدر يضيف ويعدّل الأجهزة." if installer else
-        "المستخدم صاحب البيت: ما يكدر يضيف أو يحذف أجهزة KNX، إذا طلب هذا كله يتواصل ويا الفني.")
+async def chat(api_key: str, model: str, messages: list, ctx, installer: bool, mode: str = "full") -> dict:
+    tools = tools_for(installer, mode)
+    system = system_for(installer, mode)
     msgs = [{"role": m["role"], "content": m["content"]} for m in messages[-20:]
             if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str) and m["content"].strip()]
     done: list[str] = []
@@ -144,8 +164,8 @@ def _gem_schema(s):
     return s
 
 
-async def chat_gemini(api_key: str, model: str, messages: list, ctx, installer: bool) -> dict:
-    tools = TOOLS_ALL + (TOOLS_INSTALLER if installer else [])
+async def chat_gemini(api_key: str, model: str, messages: list, ctx, installer: bool, mode: str = "full") -> dict:
+    tools = tools_for(installer, mode)
     decls = []
     for t in tools:
         d = {"name": t["name"], "description": t["description"]}
@@ -153,10 +173,7 @@ async def chat_gemini(api_key: str, model: str, messages: list, ctx, installer: 
         if sch.get("properties"):
             d["parameters"] = sch
         decls.append(d)
-    system = SYSTEM.format(
-        inst=" والأجهزة نفسها" if installer else "",
-        role_note="المستخدم هو الفني، يكدر يضيف ويعدّل الأجهزة." if installer else
-        "المستخدم صاحب البيت: ما يكدر يضيف أو يحذف أجهزة KNX، إذا طلب هذا كله يتواصل ويا الفني.")
+    system = system_for(installer, mode)
     contents = [{"role": "user" if m["role"] == "user" else "model", "parts": [{"text": m["content"]}]}
                 for m in messages[-20:] if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str) and m["content"].strip()]
     done: list[str] = []
@@ -300,3 +317,70 @@ async def local_chat(messages: list, ctx) -> dict:
     bad = [x for x in res if "ما صار" in x]
     note = ("\nما وصل لـ: " + "، ".join(x.split(":")[0] for x in bad[:6])) if bad else ""
     return {"reply": f"{'شغّلت' if on else 'طفيت'} {names} ✓{note}", "done": ["control"], "changed": True}
+
+
+# ---------------------------------------------------------------- offline scene builder (no key)
+ICON_W = (("سينما", "film"), ("فلم", "film"), ("نوم", "moon"), ("صباح", "sun"), ("عشا", "dinner"), ("غدا", "dinner"),
+          ("استقبال", "sofa"), ("ضيوف", "sofa"), ("خطار", "sofa"), ("استرخا", "lotus"), ("هدو", "lotus"), ("طلعه", "door"), ("خروج", "door"))
+
+
+async def local_scene_chat(messages: list, ctx) -> dict:
+    """Understands simple Arabic like: سويلي مشهد سينما يطفي سقف الصالة ويخلي السبوت 20 ويسد الستارة."""
+    text = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+    t = _norm(text)
+    house = await ctx.call("get_house", {}, False)
+    devs, scenes = [d for d in house["devices"] if d["type"] != "scene"], house["scenes"]
+    making = "مشهد" in t.split() or any(k in t for k in ("مشهد ", "سويلي", "سوي ", "اعمل", "صمم", "عدل مشهد"))
+    if not making:
+        for sc in scenes:
+            if _norm(sc["name"]) and _norm(sc["name"]) in t:
+                await ctx.call("run_scene", {"scene_id": sc["id"]}, False)
+                return {"reply": f"شغّلت مشهد {sc['name']} ✓", "done": ["run_scene"], "changed": True}
+        return {"reply": "أني أسوي مشاهد. اكتبلي مثلاً: \"سويلي مشهد سينما يطفي سقف الصالة ويخلي السبوت 20 ويسد الستارة\".",
+                "done": [], "changed": False}
+    raw = " ".join(str(text).split())
+    m = (_re.search(r"(?:اسمه|اسمها|بأسم|باسم)\s+(\S+(?:\s\S+)?)", raw) or _re.search(r"(?:مشهد|سين|وضع)\s+(\S+)", raw)
+         or _re.search(r"(?:اسمه|اسمها|بأسم|باسم)\s+(\S+(?:\s\S+)?)", t) or _re.search(r"(?:مشهد|سين|وضع)\s+(\S+)", t))
+    name = (m.group(1) if m else "مشهد جديد").strip()
+    name = _re.split(r"\s(?:يطفي|يشغل|يخلي|ي)", name)[0] if name else "مشهد جديد"
+    icon = next((ic for w, ic in ICON_W if w in t), "star")
+    parts = _re.split(r"\s+و(?=\S)|،|,|\sوي?\s", t)
+    actions: dict = {}
+    last_off = False
+    for seg in parts:
+        words = [_stem(w) for w in seg.split()]
+        hit = []
+        for d in devs:
+            n = _norm(d["name"])
+            if n and n in seg:
+                hit.append(d)
+                continue
+            ws_ = [_stem(x) for x in n.split() if len(_stem(x)) > 2 and _stem(x) not in ("ضوء", "اناره", "غرفه")]
+            if ws_ and all(x in words for x in ws_[:2]):
+                hit.append(d)
+        room = [d for d in devs if d.get("room") and _norm(d["room"]) in seg]
+        if not hit and room:
+            hit = room
+        if not hit:
+            continue
+        has_on = any(w in seg for w in ON_W) or any(k in seg for k in ("يشغل", "يخلي", "يولع"))
+        has_off = any(w in seg for w in OFF_W) or "يطفي" in seg
+        off = has_off if (has_on or has_off) else last_off
+        last_off = off
+        num = _re.search(r"(\d{1,3})", seg)
+        for d in hit:
+            a = {"id": d["id"], "on": not off}
+            if d["type"] == "blind":
+                a = {"id": d["id"], "on": True, "position": 100 if any(k in seg for k in ("يسد", "سد", "نزل", "ينزل")) else 0}
+            elif num and not off and d["type"] == "hvac":
+                a["setpoint"] = float(num.group(1))
+            elif num and not off and d["type"] in ("dimmer", "tuya"):
+                a["level"] = int(num.group(1))
+            actions[d["id"]] = a
+    if not actions:
+        return {"reply": f"تمام، شنو الأجهزة اللي بمشهد {name}؟ مثلاً: \"يطفي سقف الصالة ويخلي السبوت 20\".", "done": [], "changed": False}
+    old = next((sc for sc in scenes if _norm(sc["name"]) == _norm(name)), None)
+    await ctx.call("save_scene", {"id": old["id"] if old else "", "name": name, "icon": icon, "actions": list(actions.values())}, False)
+    names = {d["id"]: d["name"] for d in devs}
+    desc = "، ".join(dict.fromkeys(f"{names[a['id']]} {'يطفى' if not a['on'] else ('%s%%' % a['level'] if 'level' in a else ('%g°' % a['setpoint'] if 'setpoint' in a else ('تنسد' if a.get('position') == 100 else 'تنفتح' if 'position' in a else 'يشتغل')))}" for a in actions.values()))
+    return {"reply": f"{'عدّلت' if old else 'سويت'} مشهد \"{name}\": {desc} ✓\nتلكاه بالمشاهد، وتكدر تعدله من هناك.", "done": ["save_scene"], "changed": True}

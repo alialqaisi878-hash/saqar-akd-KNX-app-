@@ -55,6 +55,7 @@ log = logging.getLogger("bridge")
 clients: set[web.WebSocketResponse] = set()
 status = {"state": "connecting", "detail": ""}
 relay_state = {"state": "off", "detail": ""}  # connection to the company server
+ets_sessions = {"n": 0}  # remote ETS tunnels open right now
 xknx: XKNX | None = None
 
 # ---------------------------------------------------------------- Tuya (cloud)
@@ -206,7 +207,9 @@ async def get_integrations(req):
     sc = INTEG.get("solis") or {}
     cams = [{**{k: c.get(k, "") for k in ("id", "name", "room", "brand", "host", "port", "channel", "user", "url")},
              "has_password": bool(c.get("password"))} for c in INTEG.get("cameras", [])]
-    return web.json_response({"solis": {"key_id": sc.get("key_id", ""), "has_secret": bool(sc.get("secret"))},
+    k = str(INTEG.get("ai_key") or AI_KEY or "")
+    return web.json_response({"ai": {"has_key": bool(k), "kind": "gemini" if k.startswith("AIza") else ("claude" if k else "")},
+                              "solis": {"key_id": sc.get("key_id", ""), "has_secret": bool(sc.get("secret"))},
                               "cameras": cams, "solar_state": solar_state})
 
 
@@ -238,6 +241,12 @@ async def put_integrations(req):
                          "channel": str(c.get("channel", "1")).strip() or "1", "user": str(c.get("user", "")).strip(),
                          "password": pw, "url": str(c.get("url", "")).strip()})
         new["cameras"] = cams
+    if "ai_key" in data:
+        k = str(data.get("ai_key") or "").strip()
+        if k == "-":
+            new.pop("ai_key", None)
+        elif k:
+            new["ai_key"] = k
     INTEG = new
     INTEG_FILE.write_text(json.dumps(INTEG, ensure_ascii=False, indent=1), encoding="utf-8")
     snap_cache.clear()
@@ -330,6 +339,115 @@ async def cam_snapshot(req):
             return web.Response(status=502, text=str(err) or "ما وصلت للكاميرا")
         snap_cache[cid] = (now, body)
     return web.Response(body=body, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+
+# ---------------------------------------------------------------- camera discovery
+WSD_PROBE = ('<?xml version="1.0" encoding="UTF-8"?><e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope" '
+             'xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery" '
+             'xmlns:dn="http://www.onvif.org/ver10/network/wsdl"><e:Header><w:MessageID>uuid:{mid}</w:MessageID>'
+             '<w:To e:mustUnderstand="true">urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>'
+             '<w:Action e:mustUnderstand="true">http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</w:Action></e:Header>'
+             '<e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe></e:Body></e:Envelope>')
+
+
+async def wsd_probe(wait: float = 2.5) -> dict:
+    """ONVIF WS-Discovery: cameras and recorders answer with their address and scopes."""
+    import uuid
+    from urllib.parse import unquote
+    found: dict = {}
+    loop = asyncio.get_running_loop()
+
+    class P(asyncio.DatagramProtocol):
+        def datagram_received(self, data, addr):
+            txt = data.decode("utf-8", "ignore")
+            scopes = " ".join(re.findall(r"Scopes>([^<]*)<", txt))
+            name = re.search(r"onvif://www\.onvif\.org/name/(\S+)", scopes)
+            hw = re.search(r"onvif://www\.onvif\.org/hardware/(\S+)", scopes)
+            found[addr[0]] = {"ip": addr[0], "name": unquote(name.group(1)) if name else "",
+                              "model": unquote(hw.group(1)) if hw else "", "via": "onvif"}
+
+    try:
+        tr, _ = await loop.create_datagram_endpoint(P, local_addr=("0.0.0.0", 0))
+    except OSError:
+        return found
+    try:
+        msg = WSD_PROBE.format(mid=uuid.uuid4()).encode()
+        for _ in range(2):
+            tr.sendto(msg, ("239.255.255.250", 3702))
+            await asyncio.sleep(0.3)
+        await asyncio.sleep(wait)
+    finally:
+        tr.close()
+    return found
+
+
+async def http_kind(sess, ip: str) -> dict | None:
+    """Tell a Hikvision / Dahua web server apart from anything else on port 80."""
+    try:
+        async with sess.get(f"http://{ip}/ISAPI/System/deviceInfo", allow_redirects=False) as r:
+            www = r.headers.get("WWW-Authenticate", "")
+            srv = r.headers.get("Server", "")
+            if r.status == 401 and ("digest" in www.lower() or "basic" in www.lower()) and "login to" not in www.lower():
+                realm = (re.search(r'realm="([^"]*)"', www) or [None, ""])[1]
+                looks_hik = re.search(r"ip camera|ds-|nvr|dvr|hik|network video", realm, re.I)
+                if not looks_hik:
+                    # a router that asks for a password on every page is not a camera
+                    async with sess.get(f"http://{ip}/tat-probe-404", allow_redirects=False) as r2:
+                        if r2.status == 401:
+                            raise ValueError("auth everywhere")
+                return {"ip": ip, "brand": "hik", "model": realm, "via": "http"}
+            if r.status == 200 and "<deviceInfo" in (await r.text())[:400]:
+                return {"ip": ip, "brand": "hik", "model": srv, "via": "http"}
+        async with sess.get(f"http://{ip}/cgi-bin/magicBox.cgi?action=getDeviceType", allow_redirects=False) as r:
+            www = r.headers.get("WWW-Authenticate", "")
+            if r.status == 401 and "login to" in www.lower():
+                return {"ip": ip, "brand": "dahua", "model": "", "via": "http"}
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+async def port_open(ip: str, port: int = 80, t: float = 0.5) -> bool:
+    try:
+        _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), t)
+        w.close()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def discover_cams(req):
+    if not is_installer(req):
+        return web.json_response({"ok": False}, status=403)
+    import aiohttp
+    import ipaddress
+    onvif_task = asyncio.create_task(wsd_probe())
+    me = local_ips()
+    hosts: list[str] = []
+    for ip in me:
+        net = ipaddress.ip_network(ip + "/24", strict=False)
+        hosts += [str(h) for h in net.hosts() if str(h) != ip]
+    sem = asyncio.Semaphore(64)
+
+    async def check(h):
+        async with sem:
+            return h if await port_open(h) else None
+
+    open80 = [h for h in await asyncio.gather(*(check(h) for h in hosts)) if h]
+    onvif = await onvif_task
+    cand = sorted(set(open80) | set(onvif), key=lambda x: tuple(int(p) for p in x.split(".")))
+    out = []
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as sess:
+        kinds = await asyncio.gather(*(http_kind(sess, h) for h in cand))
+    for h, k in zip(cand, kinds):
+        o = onvif.get(h)
+        if not k and not o:
+            continue
+        brand = (k or {}).get("brand") or ("dahua" if o and "dahua" in (o["name"] + o["model"]).lower() else "hik")
+        out.append({"ip": h, "brand": brand, "model": (o or {}).get("model") or (k or {}).get("model", ""),
+                    "name": (o or {}).get("name", ""), "known": any(c.get("host") == h for c in INTEG.get("cameras", []))})
+    return web.json_response({"ok": True, "found": out, "scanned": len(hosts)})
 
 
 # ---------------------------------------------------------------- schedules
@@ -563,7 +681,12 @@ def new_id() -> str:
 
 
 class AssistantCtx:
+    def __init__(self, scenes_only: bool = False):
+        self.scenes_only = scenes_only
+
     async def call(self, name: str, a: dict, installer: bool):
+        if self.scenes_only and name not in ("get_house", "save_scene", "delete_scene", "run_scene"):
+            raise PermissionError("المساعد يسوي مشاهد بس")
         db = load_db()
         pr = cur_project(db)
         if name == "get_house":
@@ -673,22 +796,28 @@ AI_KEY = str(CFG.get("assistant_api_key") or CFG.get("anthropic_api_key") or "")
 
 
 async def assistant_chat(req):
+    """The TAT SMART assistant designs scenes only (Ali's rule). Free: no key = offline builder,
+    a Google AI Studio key (AIza...) = Gemini free tier, any other key = Claude."""
     if assistant is None:
         return web.json_response({"ok": False, "error": "assistant.py missing"})
     data = await req.json()
+    key = str(INTEG.get("ai_key") or AI_KEY or "").strip()
+    ctx = AssistantCtx(scenes_only=True)
     try:
-        if not AI_KEY:
-            res = await assistant.local_chat(data.get("messages", []), AssistantCtx())
-        elif AI_KEY.startswith("AIza"):
-            res = await assistant.chat_gemini(AI_KEY, str(CFG.get("assistant_model") or "gemini-flash-latest"),
-                                              data.get("messages", []), AssistantCtx(), is_installer(req))
+        if not key:
+            res = await assistant.local_scene_chat(data.get("messages", []), ctx)
+        elif key.startswith("AIza"):
+            res = await assistant.chat_gemini(key, str(CFG.get("assistant_model") or "gemini-flash-latest"),
+                                              data.get("messages", []), ctx, False, mode="scenes")
         else:
-            res = await assistant.chat(AI_KEY, str(CFG.get("assistant_model") or "claude-sonnet-5-5"),
-                                       data.get("messages", []), AssistantCtx(), is_installer(req))
+            res = await assistant.chat(key, str(CFG.get("assistant_model") or "claude-sonnet-5-5"),
+                                       data.get("messages", []), ctx, False, mode="scenes")
     except Exception as err:  # noqa: BLE001
         log.warning("assistant: %s", err)
         return web.json_response({"ok": False, "error": str(err)})
-    return web.json_response({"ok": True, **res})
+    if res.get("changed"):
+        broadcast({"t": "project"})
+    return web.json_response({"ok": True, "mode": "local" if not key else "ai", **res})
 
 
 async def holiday_step(now, sun: dict, state: dict) -> None:
@@ -956,6 +1085,7 @@ async def bridge_info(_req):
         "knx": status, "relay": relay_state, "link": remote_url["url"],
         "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
         "assistant": ("gemini" if AI_KEY.startswith("AIza") else "claude") if AI_KEY else "local",
+        "ets": {"sessions": ets_sessions["n"], "ready": bool((CFG.get("gateway_ip") or "").strip()) and bool(INSTALLER_PW or REMOTE_PW)},
     })
 
 
@@ -983,11 +1113,11 @@ async def installer_logout(_req):
 
 LOGIN_HTML = """<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TAT SMART</title>
-<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="tat-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TAT SMART"><meta name="theme-color" content="#0a1211">
-<style>body{font-family:system-ui,Tahoma,sans-serif;background:#0f172a;color:#e2e8f0;display:grid;place-items:center;min-height:100vh;margin:0}
-form{background:#1e293b;padding:28px;border-radius:14px;width:min(320px,90vw);display:grid;gap:12px}
-input,button{font:inherit;padding:12px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:inherit}
-button{background:#2563eb;border:0;font-weight:600}</style></head><body>
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="tat-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TAT SMART"><meta name="theme-color" content="#0a101c">
+<style>body{font-family:system-ui,Tahoma,sans-serif;background:radial-gradient(900px 500px at 80% -10%,#1b2c4a,transparent 60%),#0a101c;color:#eaf0f8;display:grid;place-items:center;min-height:100vh;margin:0}
+form{background:#111a2b;border:1px solid rgba(130,165,225,.16);box-shadow:0 20px 50px rgba(0,0,0,.4);padding:28px;border-radius:20px;width:min(320px,90vw);display:grid;gap:12px}
+input,button{font:inherit;padding:12px;border-radius:12px;border:1px solid #2a3550;background:#0b1322;color:inherit}
+button{background:linear-gradient(135deg,#6c9ce6,#446592);border:0;font-weight:600;cursor:pointer}</style></head><body>
 <form method="post" action="login"><img src="tat-192.png" alt="" style="width:84px;height:84px;border-radius:20px;justify-self:center"><b style="text-align:center">TAT SMART</b><span>اكتب كلمة السر</span>
 <input type="password" name="pw" autofocus>%s<button>دخول</button></form></body></html>"""
 
@@ -1051,12 +1181,14 @@ async def ets_tunnel(req):
 
     transport, _ = await loop.create_datagram_endpoint(Relay, remote_addr=(gw, 3671))
     log.info("ETS remote session opened (%s)", req.headers.get("Cf-Connecting-Ip") or req.remote)
+    ets_sessions["n"] += 1
     try:
         async for msg in ws:
             if msg.type == WSMsgType.BINARY:
                 transport.sendto(msg.data)
     finally:
         transport.close()
+        ets_sessions["n"] = max(0, ets_sessions["n"] - 1)
         log.info("ETS remote session closed")
     return ws
 
@@ -1233,7 +1365,7 @@ PUBLIC_FILES = ("/manifest.webmanifest", "/tat-180.png", "/tat-192.png", "/tat-5
 MANIFEST = {
     "name": "TAT SMART", "short_name": "TAT SMART", "lang": "ar", "dir": "rtl",
     "start_url": "./", "scope": "./", "display": "standalone",
-    "background_color": "#0a1211", "theme_color": "#0a1211",
+    "background_color": "#0a101c", "theme_color": "#0a101c",
     "icons": [{"src": "tat-192.png", "sizes": "192x192", "type": "image/png"},
               {"src": "tat-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}],
 }
@@ -1347,6 +1479,7 @@ async def main() -> None:
         web.get("/api/cameras", get_cameras),
         web.get("/api/cam/{cid}", cam_snapshot),
         web.get("/api/integrations", get_integrations),
+        web.get("/api/discover/cams", discover_cams),
         web.put("/api/integrations", put_integrations),
         web.get("/tat-{n:(180|192|512)}.png", app_icon),
         web.put("/api/schedules", put_schedules),
