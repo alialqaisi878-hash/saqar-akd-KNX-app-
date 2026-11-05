@@ -1114,7 +1114,7 @@ async def installer_logout(_req):
 LOGIN_HTML = """<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TAT SMART</title>
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="tat-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TAT SMART"><meta name="theme-color" content="#0a101c">
-<style>body{font-family:system-ui,Tahoma,sans-serif;background:radial-gradient(900px 500px at 80% -10%,#1b2c4a,transparent 60%),#0a101c;color:#eaf0f8;display:grid;place-items:center;min-height:100vh;margin:0}
+<style>body{font-family:system-ui,Tahoma,sans-serif;background:radial-gradient(900px 500px at 80%% -10%%,#1b2c4a,transparent 60%%),#0a101c;color:#eaf0f8;display:grid;place-items:center;min-height:100vh;margin:0}
 form{background:#111a2b;border:1px solid rgba(130,165,225,.16);box-shadow:0 20px 50px rgba(0,0,0,.4);padding:28px;border-radius:20px;width:min(320px,90vw);display:grid;gap:12px}
 input,button{font:inherit;padding:12px;border-radius:12px;border:1px solid #2a3550;background:#0b1322;color:inherit}
 button{background:linear-gradient(135deg,#6c9ce6,#446592);border:0;font-weight:600;cursor:pointer}</style></head><body>
