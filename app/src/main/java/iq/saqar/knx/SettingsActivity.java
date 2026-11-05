@@ -22,7 +22,7 @@ import java.io.File;
 /** First-run / installer screen: house name, IP router address, password. */
 public class SettingsActivity extends Activity {
     private static final int PICK_PROJECT = 9;
-    private EditText house, ip, pw, inst, relay, tId, tSecret, tRegion;
+    private EditText house, ip, pw, inst, relay, tId, tSecret, tRegion, aiKey;
     private TextView link;
 
     @Override protected void onCreate(Bundle b) {
@@ -56,6 +56,12 @@ public class SettingsActivity extends Activity {
         tId = field(l, "Access ID / Client ID", c.optString("tuya_access_id"), false);
         tSecret = field(l, "Access Secret / Client Secret", c.optString("tuya_access_secret"), true);
         tRegion = field(l, "الداتاسنتر (eu لأوروبا)", c.optString("tuya_region", "eu"), false);
+
+        TextView ah = text("مساعد البيت الذكي (اختياري)", 19);
+        ah.setPadding(0, 40, 0, 4);
+        l.addView(ah);
+        l.addView(text("مفتاح API من console.anthropic.com ← API Keys. يبدي بـ sk-ant-", 13));
+        aiKey = field(l, "مفتاح المساعد", c.optString("assistant_api_key"), true);
 
         link = text("", 15);
         link.setTextColor(Color.parseColor("#7dd3fc"));
@@ -125,7 +131,8 @@ public class SettingsActivity extends Activity {
         if (r.isEmpty()) r = Config.DEFAULT_RELAY;
         try {
             Config.save(this, h, i, p, ins, r, tId.getText().toString().trim(),
-                    tSecret.getText().toString().trim(), tRegion.getText().toString().trim().toLowerCase());
+                    tSecret.getText().toString().trim(), tRegion.getText().toString().trim().toLowerCase(),
+                    aiKey.getText().toString().trim());
         } catch (Exception e) {
             toast("ما انحفظ: " + e.getMessage());
             return;
@@ -150,6 +157,7 @@ public class SettingsActivity extends Activity {
                 tId.setText(restored.optString("tuya_access_id"));
                 tSecret.setText(restored.optString("tuya_access_secret"));
                 tRegion.setText(restored.optString("tuya_region", "eu"));
+                aiKey.setText(restored.optString("assistant_api_key"));
                 updateLink();
                 toast("انسترجع البيت والخريطة، اضغط حفظ وتشغيل");
             } else if (o.has("house_id")) {

@@ -40,7 +40,7 @@ final class Config {
     }
 
     static void save(Context c, String houseId, String ip, String pw, String instPw, String relay,
-                     String tuyaId, String tuyaSecret, String tuyaRegion) throws Exception {
+                     String tuyaId, String tuyaSecret, String tuyaRegion, String aiKey) throws Exception {
         JSONObject o = load(c); // keeps house_key and anything else already there
         o.put("house_id", houseId);
         o.put("gateway_ip", ip);
@@ -50,6 +50,7 @@ final class Config {
         o.put("tuya_access_id", tuyaId);
         o.put("tuya_access_secret", tuyaSecret);
         o.put("tuya_region", tuyaRegion.isEmpty() ? "eu" : tuyaRegion);
+        o.put("assistant_api_key", aiKey);
         if (!o.has("connection")) o.put("connection", "auto");
         if (!o.has("keyring_file")) o.put("keyring_file", "");
         if (!o.has("keyring_password")) o.put("keyring_password", "");

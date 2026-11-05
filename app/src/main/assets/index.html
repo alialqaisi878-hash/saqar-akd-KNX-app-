@@ -162,10 +162,108 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .note{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 [hidden]{display:none!important}
+/* ---------- dashboard (owner view) ---------- */
+#dash{--d-bg:#0a1211;--d-card:#111d1b;--d-card2:#15241f;--d-line:rgba(94,234,212,.14);--d-ink:#e8f3ef;--d-mut:#8fa8a0;--d-acc:#3fd0b0;--d-acc2:#1f8f78;--d-warm:#ffc070;
+ position:fixed;inset:0;z-index:20;background:radial-gradient(1200px 600px at 80% -10%,#16302a 0%,transparent 60%),var(--d-bg);color:var(--d-ink);display:grid;grid-template-columns:210px 1fr;font-family:var(--f-body,system-ui)}
+#dash[hidden]{display:none}
+.dside{border-inline-start:0;border-inline-end:1px solid var(--d-line);padding:18px 12px;display:flex;flex-direction:column;gap:6px;background:rgba(5,10,9,.45)}
+.dbrand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.92rem;margin:2px 6px 18px;color:var(--d-ink)}
+.dbrand svg{width:26px;height:26px;color:var(--d-acc)}
+.dnav{display:flex;align-items:center;gap:10px;border:1px solid transparent;background:none;color:var(--d-mut);padding:10px 12px;border-radius:12px;font:inherit;font-size:.92rem;cursor:pointer;text-align:start}
+.dnav svg{width:20px;height:20px;flex:none}
+.dnav:hover{color:var(--d-ink)}
+.dnav[aria-current="true"]{background:linear-gradient(135deg,rgba(63,208,176,.28),rgba(31,143,120,.18));border-color:rgba(63,208,176,.45);color:#fff}
+.dside .sp{flex:1}
+.dmain{overflow:auto;padding:22px 24px 28px;min-width:0}
+.dhead{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.dhead h1{margin:0;font-family:var(--f-display,inherit);font-size:1.7rem;font-weight:700;border-inline-start:3px solid var(--d-acc);padding-inline-start:12px;line-height:1.1}
+.dhead .sub{color:var(--d-mut);font-size:.85rem;margin-top:6px;padding-inline-start:15px}
+.dchips{display:flex;gap:8px;flex-wrap:wrap}
+.dchip{background:var(--d-card);border:1px solid var(--d-line);border-radius:99px;padding:6px 12px;font-size:.8rem;color:var(--d-mut)}
+.dchip b{color:var(--d-ink)}
+.dgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.dcard{position:relative;background:linear-gradient(160deg,var(--d-card2),var(--d-card));border:1px solid var(--d-line);border-radius:18px;padding:14px;overflow:hidden;min-height:150px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.dcard h3{margin:0 0 8px;font-size:.92rem;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--d-ink)}
+.dcard h3 svg{width:17px;height:17px;color:var(--d-acc)}
+.dcard .more{position:absolute;top:12px;inset-inline-end:12px;font-size:.75rem;color:var(--d-mut);background:none;border:0;cursor:pointer}
+.dhero{grid-column:span 7;min-height:260px;padding:0;cursor:pointer;background:#0d1715}
+.dhero img,.droom img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.dhero .ov,.droom .ov{position:absolute;inset:0;background:linear-gradient(0deg,rgba(5,10,9,.85) 0%,rgba(5,10,9,.1) 55%,rgba(5,10,9,.35) 100%)}
+.dhero .tag2,.droom .tag2{position:absolute;top:12px;inset-inline-end:12px;background:rgba(5,10,9,.7);border:1px solid var(--d-line);border-radius:99px;padding:4px 12px;font-size:.8rem}
+.dhero .cap,.droom .cap{position:absolute;bottom:14px;inset-inline-start:16px;inset-inline-end:16px}
+.cap .t{font-size:1.25rem;font-weight:700}.cap .s{color:#cfe4dd;font-size:.85rem}
+.dac{grid-column:span 5}
+.dlight,.dblind,.denergy{grid-column:span 4}
+.dscenes{grid-column:span 12;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.dsc{display:flex;align-items:center;justify-content:center;gap:10px;height:62px;border-radius:16px;border:1px solid var(--d-line);background:linear-gradient(160deg,var(--d-card2),var(--d-card));color:var(--d-ink);font:inherit;font-size:1rem;cursor:pointer}
+.dsc svg{width:24px;height:24px;color:var(--d-acc)}
+.dsc.on,.dsc:active{background:linear-gradient(135deg,#2a9d84,#1c6e5d);border-color:#5fe3c4;color:#fff}.dsc.on svg{color:#fff}
+.dsc.off svg{color:#ff8a7a}
+.dial{display:grid;place-items:center;position:relative;height:150px}
+.dial svg{width:190px;height:120px}
+.dial .val{position:absolute;bottom:22px;font-size:2.1rem;font-weight:600;font-family:var(--f-display,inherit)}
+.dial .rt{position:absolute;bottom:2px;font-size:.78rem;color:var(--d-mut)}
+.dial .pm{position:absolute;bottom:26px;width:38px;height:38px;border-radius:12px;border:1px solid var(--d-line);background:rgba(255,255,255,.04);color:var(--d-ink);font-size:1.3rem;cursor:pointer}
+.dial .pm.l{inset-inline-end:8%}.dial .pm.r{inset-inline-start:8%}
+.acunit{position:absolute;top:34px;inset-inline-start:50%;transform:translateX(50%);width:58%;opacity:.95}
+.dpwr{position:absolute;top:10px;inset-inline-end:12px;width:34px;height:34px;border-radius:50%;border:1px solid var(--d-line);background:rgba(255,255,255,.05);color:var(--d-mut);cursor:pointer;display:grid;place-items:center}
+.dpwr.on{background:var(--d-acc);color:#06201a;border-color:var(--d-acc)}
+.dpwr svg{width:16px;height:16px}
+.lamp{height:78px;display:grid;place-items:center;position:relative}
+.lamp .ring{width:96px;height:30px;border-radius:50%;background:radial-gradient(ellipse at 50% 40%,#2a2a2a 0 40%,#555 41% 55%,#1b1b1b 56%);box-shadow:0 2px 0 #777 inset}
+.lamp .glow{position:absolute;width:150px;height:90px;border-radius:50%;background:radial-gradient(ellipse,var(--lc,#ffd28a) 0%,transparent 65%);opacity:var(--lo,0);filter:blur(4px);transition:opacity .3s}
+.curt{height:78px;border-radius:10px;position:relative;overflow:hidden;background:linear-gradient(180deg,#cfe7e0,#88b9a8)}
+.curt .cl{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(90deg,#6b5847 0 8px,#8a7360 8px 14px,#5d4b3c 14px 20px);transition:width .4s}
+.curt .cl.a{inset-inline-start:0}.curt .cl.b{inset-inline-end:0}
+.dsl{display:flex;align-items:center;gap:10px;margin-top:12px;direction:rtl}
+.dsl span{min-width:42px;font-size:.85rem;color:var(--d-mut)}
+.dsl input{flex:1;accent-color:var(--d-acc)}
+.dbig{font-size:2rem;font-weight:600;font-family:var(--f-display,inherit)}
+.dmut{color:var(--d-mut);font-size:.82rem}
+.dempty{color:var(--d-mut);font-size:.85rem;padding:20px 4px}
+.drooms{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.droom{position:relative;height:170px;border-radius:18px;overflow:hidden;border:1px solid var(--d-line);cursor:pointer;background:linear-gradient(135deg,#1a2e29,#0e1816)}
+.droom .up{position:absolute;top:10px;inset-inline-start:10px;z-index:2;font-size:.75rem}
+.dtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.dtile{background:linear-gradient(160deg,var(--d-card2),var(--d-card));border:1px solid var(--d-line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:112px;cursor:pointer;color:var(--d-ink);font:inherit;text-align:start}
+.dtile .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.05);color:var(--d-mut)}
+.dtile .ic svg{width:22px;height:22px}
+.dtile.on{border-color:rgba(255,192,112,.5);box-shadow:0 0 0 1px rgba(255,192,112,.2),0 8px 30px rgba(255,170,60,.12)}
+.dtile.on .ic{background:var(--d-warm);color:#3a2300}
+.dtile.hvac.on .ic{background:#5aa9ff;color:#04203f}
+.dtile .n{font-weight:600;font-size:.95rem}.dtile .st{font-size:.8rem;color:var(--d-mut)}
+.dtile.off-line{opacity:.5}
+.dsec{margin:18px 2px 10px;font-weight:600;color:var(--d-ink);display:flex;justify-content:space-between;align-items:center}
+.dbtn{background:rgba(255,255,255,.05);border:1px solid var(--d-line);color:var(--d-ink);border-radius:10px;padding:7px 12px;font:inherit;font-size:.82rem;cursor:pointer}
+.dbtn.p{background:var(--d-acc);color:#05201a;border-color:var(--d-acc);font-weight:600}
+.chat{display:flex;flex-direction:column;height:calc(100vh - 150px);max-height:760px;background:var(--d-card);border:1px solid var(--d-line);border-radius:18px;overflow:hidden}
+.chat .msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.chat .m{max-width:82%;padding:10px 14px;border-radius:16px;line-height:1.6;white-space:pre-wrap;font-size:.95rem}
+.chat .m.u{align-self:flex-start;background:var(--d-acc2);color:#fff;border-end-start-radius:4px}
+.chat .m.a{align-self:flex-end;background:#1b2c28;border:1px solid var(--d-line);border-end-end-radius:4px}
+.chat .m.e{align-self:center;background:#3a1a1a;color:#ffd0c8;font-size:.85rem}
+.chat form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--d-line)}
+.chat textarea{flex:1;resize:none;height:46px;border-radius:12px;border:1px solid var(--d-line);background:#0b1513;color:var(--d-ink);padding:10px 12px;font:inherit}
+.chat .sugg{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px}
+.chat .sugg button{font-size:.78rem}
+.dback{position:fixed;bottom:16px;inset-inline-start:16px;z-index:15;background:#0f1d1a;color:#e8f3ef;border:1px solid rgba(94,234,212,.4);border-radius:99px;padding:10px 16px;font:inherit;box-shadow:0 8px 24px rgba(0,0,0,.3);cursor:pointer}
+#dash .sheetfix{}
+@media (max-width:820px){
+ #dash{grid-template-columns:1fr;grid-template-rows:1fr auto}
+ .dside{order:2;flex-direction:row;overflow-x:auto;border:0;border-top:1px solid var(--d-line);padding:6px;gap:2px}
+ .dbrand,.dside .sp{display:none}
+ .dnav{flex-direction:column;gap:2px;font-size:.68rem;padding:6px 10px;white-space:nowrap}
+ .dmain{padding:14px 12px 18px}
+ .dhero,.dac,.dlight,.dblind,.denergy{grid-column:span 12}
+ .dhead h1{font-size:1.35rem}
+}
+@media (min-width:821px) and (max-width:1100px){.dlight,.dblind,.denergy{grid-column:span 6}.dhero,.dac{grid-column:span 12}}
+
 </style>
 
 </head>
 <body>
+<div id="dash" hidden></div><button class="dback" id="dashBack" hidden>⌂ الواجهة</button>
 <div class="app" id="app" lang="ar">
   <div class="bar">
     <div class="brand">
@@ -384,6 +482,9 @@ function connect(){
   if(m.t==="status"){const was=knxState;knxState=m.state;setTag();if(m.state==="connected"&&m.detail==="routing"){const t=$("#connTag");t.textContent="متصل (Routing، غير مؤكد)";t.className="tag";}if(m.state==="error"&&m.detail)toast(m.detail);if(m.state==="connected"&&was!=="connected")ws.send(JSON.stringify({t:"read",gas:statusGas()}));}
   if(m.t==="tg")incoming(m);
   if(m.t==="tuya"){m.devices.forEach(x=>tuyaSt[x.id]=x);tuyaApply();renderStage();if(tab==="dev")renderPane();}
+  if(m.t==="project")reloadProject();
+  if(m.t==="schedules"){schedules=null;if(tab==="sch")renderPane();}
+  if(m.t==="status"&&dashOn)renderDash();
   if(m.t==="tuya_err"&&role.installer)toast("تويا: "+m.msg);
   if(m.t==="error")toast(m.msg);
   if(m.t==="remote"&&location.protocol!=="https:"){const t=$("#connTag");if(t){let a=document.getElementById("remoteLink");if(!a){a=document.createElement("a");a.id="remoteLink";a.className="tag";a.target="_blank";a.style.marginInlineStart="6px";t.after(a);}a.href=m.url;a.textContent="🌐 رابط من برة البيت";a.title=m.url;}}
@@ -430,6 +531,7 @@ function renderTop(){
  $("#planInfo").textContent=p.plan?(p.sample?"الخريطة الحالية نموذج للتجربة":"الخريطة مرفوعة · "+p.planW+"×"+p.planH):"";
 }
 function renderStage(){
+ if(dashOn){if(H3){H3.dispose();H3=null;}renderDash();return;}
  const p=P(),st=$("#stage");
  st.classList.toggle("editing",mode==="edit");
  $("#vw2").setAttribute("aria-pressed",!view3d);$("#vw3").setAttribute("aria-pressed",view3d);
@@ -652,6 +754,218 @@ function render3d(){
  if(H3){H3.dispose();H3=null;}
  build3d();
 }
+
+/* ---------- owner dashboard ---------- */
+const SV=(p,extra="")=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ${extra}>${p}</svg>`;
+const DI={
+ home:SV('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'),
+ rooms:SV('<path d="M3 18V8"/><path d="M3 14h18v4"/><path d="M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="11" r="1.6"/>'),
+ light:SV('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
+ ac:SV('<path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11"/>'),
+ blind:SV('<path d="M4 3h16"/><path d="M6 3v15M18 3v15"/><path d="M6 18c2-1 2-8 1-15M18 18c-2-1-2-8-1-15"/><path d="M4 21h16"/>'),
+ map:SV('<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>'),
+ scenes:SV('<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>'),
+ ai:SV('<path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10h.01M12 10h.01M15.5 10h.01"/>'),
+ lock:SV('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+ power:SV('<path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/>'),
+ bolt:SV('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'),
+ cam:SV('<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>'),
+ sofa:SV('<path d="M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/><path d="M2 13a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v5H2z"/><path d="M5 18v2M19 18v2"/>'),
+ film:SV('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 7l3-4h3l-3 4M10 7l3-4h3l-3 4M17 7l3-4"/>'),
+ lotus:SV('<path d="M12 20c-4 0-8-2-9-6 3 0 6 1 9 4 3-3 6-4 9-4-1 4-5 6-9 6z"/><path d="M12 18c-2-3-2-7 0-11 2 4 2 8 0 11z"/><path d="M8.5 15c-1.5-2.5-1.5-5 0-7.5M15.5 15c1.5-2.5 1.5-5 0-7.5"/>'),
+ moon:SV('<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>'),
+ sun:SV('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+ dinner:SV('<path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10"/><path d="M17 21V3c-2 0-3 3-3 7h3"/>'),
+ door:SV('<path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><path d="M3 21h18"/><path d="M14 12h.01"/>'),
+ star:SV('<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>')
+};
+const SCENE_ICONS=[["sofa","استقبال"],["film","سينما"],["lotus","استرخاء"],["moon","نوم"],["sun","صباح"],["dinner","عشاء"],["door","خروج"],["star","مشهد"]];
+let dashOn=true,dpage="home",droom=null,chatLog=[],chatBusy=false,lastScene="";
+const isLight=d=>d.type==="switch"||d.type==="dimmer"||(d.type==="tuya"&&(d.dimCode||/^(dj|dd|xdd|fwd|dc|tgq|tgkg)$/.test(((tuyaSt[d.tuyaId]||{}).category)||"")));
+const isPlug=d=>d.type==="tuya"&&!isLight(d);
+function roomsOf(){const p=P();const names=[...new Set(p.devices.map(d=>d.room).filter(Boolean))];Object.keys(p.rooms||{}).forEach(r=>{if(!names.includes(r))names.push(r);});return names;}
+function roomPhoto(r){const p=P();return (p.rooms&&p.rooms[r]&&p.rooms[r].photo)||"";}
+function devSet(d,on){
+ if(d.type==="tuya"){if(tuyaSend(d,d.code,on))d.st.on=on;return;}
+ const g=d.ga||{};if(d.type==="blind"){if(telegram(g.updown,"1.008",on?1:0))d.st.pos=on?100:0;return;}
+ if(d.type==="scene"){if(on)telegram(g.scene,"17.001",d.sceneNo||1);return;}
+ if(!telegram(g.cmd,"1.001",on?1:0))return;d.st.on=on;if(d.type==="dimmer"&&on&&!d.st.level)d.st.level=100;respond(g.status,"1.001",on?1:0);
+}
+function devLevel(d,n){
+ const g=d.ga||{};
+ if(d.type==="dimmer"){if(!telegram(g.value,"5.001",n))return;d.st.level=n;d.st.on=n>0;respond(g.valueStatus,"5.001",n);return;}
+ if(d.type==="tuya"&&d.dimCode){const cmds=[{code:d.code,value:n>0}];if(n>0)cmds.push({code:d.dimCode,value:tuyaRaw(d,n)});
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:"tuya",id:d.tuyaId,commands:cmds}));d.st.level=n;d.st.on=n>0;return;}
+ if(d.type==="blind"){if(telegram(g.position,"5.001",n))d.st.pos=n;return;}
+}
+function devSetpoint(d,v){const g=d.ga||{};if(telegram(g.setpoint,"9.001",v)){d.st.setpoint=v;}}
+const isOnD=d=>d.type==="blind"?(d.st.pos||0)>0:!!d.st.on;
+function tileStatus(d){return statusText(d);}
+function tile(d){
+ const on=d.type!=="scene"&&isOnD(d)&&d.type!=="blind";
+ const ic=d.type==="tuya"?(isLight(d)?I.switch:I.tuya):I[d.type];
+ return `<button class="dtile ${d.type}${on?" on":""}${d.st.offline?" off-line":""}" data-dt="${d.id}"><span class="ic">${ic}</span><span class="n">${esc(d.name)}</span><span class="st">${esc(tileStatus(d))}${d.room&&dpage!=="room"?" · "+esc(d.room):""}</span></button>`;
+}
+function tilesHtml(list){return list.length?`<div class="dtiles">${list.map(tile).join("")}</div>`:`<div class="dempty">ما بيه أجهزة هنا.</div>`;}
+function sceneBtns(){
+ const p=P();const vs=(p.scenes||[]).map(s=>`<button class="dsc${lastScene===s.id?" on":""}" data-vs="${s.id}">${DI[s.icon]||DI.star}${esc(s.name)}</button>`);
+ const ks=p.devices.filter(d=>d.type==="scene").map(d=>`<button class="dsc" data-ks="${d.id}">${DI.star}${esc(d.name)}</button>`);
+ return [...vs,...ks,`<button class="dsc off" data-alloff="1">${DI.power}إطفاء الكل</button>`].join("");
+}
+function dialSvg(v,on){const min=16,max=30,k=Math.max(0,Math.min(1,(v-min)/(max-min)));const a0=Math.PI*0.95,a1=Math.PI*0.05;const a=a0+(a1-a0)*k;
+ const pt=t=>[95+75*Math.cos(t),105-75*Math.sin(t)];const [x0,y0]=pt(a0),[x1,y1]=pt(a1),[xa,ya]=pt(a);
+ return `<svg viewBox="0 0 190 120"><path d="M${x0} ${y0} A75 75 0 0 1 ${x1} ${y1}" stroke="rgba(255,255,255,.1)" stroke-width="10" fill="none" stroke-linecap="round"/>
+ <path d="M${x0} ${y0} A75 75 0 0 1 ${xa} ${ya}" stroke="${on?"url(#acg)":"#4b5d58"}" stroke-width="10" fill="none" stroke-linecap="round"/>
+ <defs><linearGradient id="acg" x1="0" x2="1"><stop offset="0" stop-color="#3fd0b0"/><stop offset="1" stop-color="#5aa9ff"/></linearGradient></defs></svg>`;}
+const AC_UNIT=`<svg class="acunit" viewBox="0 0 200 70"><rect x="4" y="4" width="192" height="44" rx="10" fill="#eef2f1"/><rect x="14" y="36" width="172" height="6" rx="3" fill="#cfd6d4"/><circle cx="176" cy="16" r="2.5" fill="#3fd0b0"/>
+ <g stroke="#7fd3ff" stroke-width="2.5" fill="none" opacity=".75" stroke-linecap="round"><path d="M40 52c-4 6-4 10 0 16"/><path d="M80 52c-3 6-3 10 0 16"/><path d="M120 52c3 6 3 10 0 16"/><path d="M160 52c4 6 4 10 0 16"/></g></svg>`;
+function dashHome(){
+ const p=P(),devs=p.devices;const rooms=roomsOf();
+ const heroRoom=rooms.find(r=>roomPhoto(r))||rooms[0]||"";const photo=heroRoom?roomPhoto(heroRoom):"";
+ const lightsOn=devs.filter(d=>isLight(d)&&d.st.on).length,lightsAll=devs.filter(isLight).length;
+ const ac=devs.find(d=>d.type==="hvac"),dim=devs.find(d=>d.type==="dimmer"||(d.type==="tuya"&&d.dimCode))||devs.find(isLight),bl=devs.find(d=>d.type==="blind");
+ let watts=0,meters=0;devs.forEach(d=>{if(d.type==="tuya"){const f=tuyaFeat(d);if(f.power!=null){watts+=f.power;meters++;}}});
+ const heroDevs=heroRoom?devs.filter(d=>d.room===heroRoom):devs;const heroOn=heroDevs.filter(d=>isLight(d)&&d.st.on).length;
+ return `<div class="dgrid">
+ <div class="dcard dhero" data-room="${esc(heroRoom)}">${photo?`<img src="${photo}" alt="">`:(p.plan?`<img src="${p.plan}" alt="" style="object-fit:contain;background:#e9eef0;opacity:.85">`:"")}<div class="ov"></div>
+  <span class="tag2">${esc(heroRoom||p.name||"البيت")}</span>
+  <div class="cap"><div class="t">${esc(heroRoom||"البيت")}</div><div class="s">${heroOn?heroOn+" ضوء شغّال":"كل الإنارة طافية"}${!photo&&role.installer?" · ارفع صورة الغرفة من صفحة الغرف":""}</div></div></div>
+ ${ac?`<div class="dcard dac"><h3>${DI.ac}التبريد · ${esc(ac.name)}</h3><button class="dpwr${ac.st.on?" on":""}" data-pw="${ac.id}" aria-label="تشغيل/إطفاء">${DI.power}</button>${AC_UNIT}
+  <div class="dial" style="margin-top:46px">${dialSvg(ac.st.setpoint||22,ac.st.on)}<span class="val">${ac.st.setpoint||22}°</span><span class="rt">الغرفة ${ac.st.temp??"–"}°</span>
+  <button class="pm l" data-sp="${ac.id}" data-d="-0.5">−</button><button class="pm r" data-sp="${ac.id}" data-d="0.5">+</button></div></div>`
+  :`<div class="dcard dac"><h3>${DI.bolt}البيت الآن</h3><div class="dbig">${lightsOn}<span class="dmut"> / ${lightsAll} ضوء شغّال</span></div><div class="dmut" style="margin-top:8px">${sunT.sunset?"🌇 الغروب "+sunT.sunset+" · 🌅 الشروق "+sunT.sunrise:""}</div></div>`}
+ ${dim?`<div class="dcard dlight"><h3>${DI.light}الإنارة · ${esc(dim.name)}</h3><button class="more" data-go="light">الكل ‹</button>
+  <div class="lamp" style="--lo:${dim.st.on?Math.max(.3,(dim.st.level||100)/100):0};--lc:${devColor(dim)||"#ffd28a"}"><span class="glow"></span><span class="ring"></span></div>
+  ${dim.type==="dimmer"||dim.dimCode?`<div class="dsl"><span>${dim.st.on?(dim.st.level||0):0}%</span><input type="range" min="0" max="100" step="5" value="${dim.st.on?(dim.st.level||0):0}" data-lv="${dim.id}"></div>`
+   :`<div class="dsl"><button class="dbtn p" data-tg="${dim.id}" style="flex:1">${dim.st.on?"إطفاء":"تشغيل"}</button></div>`}</div>`:""}
+ ${bl?`<div class="dcard dblind"><h3>${DI.blind}الستائر · ${esc(bl.name)}</h3><button class="more" data-go="blind">الكل ‹</button>
+  <div class="curt"><span class="cl a" style="width:${(bl.st.pos||0)/2}%"></span><span class="cl b" style="width:${(bl.st.pos||0)/2}%"></span></div>
+  <div class="dsl"><span>${bl.st.pos||0}%</span><input type="range" min="0" max="100" step="5" value="${bl.st.pos||0}" data-ps="${bl.id}"></div></div>`:""}
+ <div class="dcard denergy"><h3>${DI.bolt}${meters?"الكهرباء":"الأجهزة"}</h3>${meters?`<div class="dbig">${Math.round(watts).toLocaleString("en")}<span class="dmut"> واط الآن</span></div><div class="dmut">من ${meters} عداد ذكي</div>`
+   :`<div class="dbig">${devs.filter(d=>isOnD(d)&&d.type!=="blind").length}<span class="dmut"> جهاز شغّال</span></div>`}
+  <div class="dmut" style="margin-top:10px">${knxState==="connected"?"● KNX متصل":"○ KNX غير متصل"}</div></div>
+ <div class="dscenes">${sceneBtns()}</div>
+ </div>`;
+}
+function dashRooms(){
+ const rooms=roomsOf(),p=P();
+ return (rooms.length?`<div class="drooms">${rooms.map(r=>{const ds=p.devices.filter(d=>d.room===r);const on=ds.filter(d=>isLight(d)&&d.st.on).length;const ph=roomPhoto(r);
+  return `<div class="droom" data-room="${esc(r)}">${ph?`<img src="${ph}" alt="">`:""}<div class="ov"></div>${role.installer?`<label class="dbtn up" data-noopen="1">📷 صورة<input type="file" accept="image/*" hidden data-photo="${esc(r)}"></label>`:""}
+  <span class="tag2">${ds.length} جهاز</span><div class="cap"><div class="t">${esc(r)}</div><div class="s">${on?on+" ضوء شغّال":"طافية"}</div></div></div>`;}).join("")}</div>`
+  :`<div class="dempty">ما بيه غرف بعد. الفني يكتب اسم الغرفة لكل جهاز من وضع التعديل بالخريطة.</div>`)+
+  (p.devices.some(d=>!d.room)?`<div class="dsec">بدون غرفة</div>`+tilesHtml(p.devices.filter(d=>!d.room&&d.type!=="scene")):"");
+}
+function dashRoom(){
+ const p=P(),r=droom,ds=p.devices.filter(d=>d.room===r);const on=ds.some(d=>isOnD(d)&&d.type!=="blind");
+ return `${roomPhoto(r)?`<div class="dcard dhero" style="min-height:200px;margin-bottom:14px;cursor:default"><img src="${roomPhoto(r)}" alt=""><div class="ov"></div><div class="cap"><div class="t">${esc(r)}</div></div></div>`:""}
+  <div class="dsec"><span>أجهزة ${esc(r)}</span>${on?`<button class="dbtn" data-roomoff2="${esc(r)}">${"إطفاء الغرفة"}</button>`:""}</div>${tilesHtml(ds.filter(d=>d.type!=="scene"))}
+  ${ds.some(d=>d.type==="scene")?`<div class="dsec">سينات الغرفة</div>${tilesHtml(ds.filter(d=>d.type==="scene"))}`:""}`;
+}
+function grouped(list){const by={};list.forEach(d=>{(by[d.room||"بدون غرفة"]=by[d.room||"بدون غرفة"]||[]).push(d);});
+ return Object.keys(by).map(r=>`<div class="dsec">${esc(r)}</div>`+tilesHtml(by[r])).join("")||`<div class="dempty">ما بيه أجهزة.</div>`;}
+function dashScenes(){
+ const p=P();
+ return `<div class="dscenes" style="margin-bottom:16px">${sceneBtns()}</div>
+  <div class="dsec"><span>المشاهد</span><button class="dbtn p" data-newscene="1">+ مشهد جديد</button></div>
+  ${(p.scenes||[]).map(s=>`<div class="dcard" style="min-height:0;margin-bottom:10px;display:flex;align-items:center;gap:10px"><span style="width:24px;color:var(--d-acc)">${DI[s.icon]||DI.star}</span><div style="flex:1"><b>${esc(s.name)}</b><div class="dmut">${s.actions.length} جهاز</div></div><button class="dbtn" data-edscene="${s.id}">تعديل</button></div>`).join("")||`<div class="dempty">سوّي مشهد: شغّل الأضوية مثل ما تحبها، وبعدين "مشهد جديد" ← "خذ الوضع الحالي".</div>`}
+  <p class="dmut">تكدر تطلب من المساعد: "سويلي مشهد سينما يطفي إنارة الصالة وينزل الستارة".</p>`;
+}
+function dashChat(){
+ return `<div class="chat"><div class="msgs" id="chatMsgs">${chatLog.length?chatLog.map(m=>`<div class="m ${m.role==="user"?"u":m.role==="error"?"e":"a"}">${esc(m.content)}</div>`).join(""):
+  `<div class="m a">هلا بيك 👋 آني مساعد البيت. احچيلي شتريد، مثلاً:\n• "طفي كل إنارة الطابق"\n• "شغّل إنارة الحديقة كل يوم بالغروب"\n• "سويلي مشهد سينما"${role.installer?"\n• \"ضيف ضوء بالمطبخ على العنوان 1/2/5\"":""}</div>`}
+  ${chatBusy?`<div class="m a">… دا أشتغل</div>`:""}</div>
+  <div class="sugg">${["شنو الشغّال هسة؟","طفي كل شي بالبيت","شغّل إنارة الصالة","سويلي موعد يطفي الإنارة 12 بالليل"].map(t=>`<button class="dbtn" data-sg="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+  <form id="chatF"><textarea id="chatIn" placeholder="اكتب طلبك…" ${chatBusy?"disabled":""}></textarea><button class="dbtn p" ${chatBusy?"disabled":""}>إرسال</button></form></div>`;
+}
+async function sendChat(text){
+ text=(text||"").trim();if(!text||chatBusy)return;
+ chatLog.push({role:"user",content:text});chatBusy=true;renderDash();
+ const r=await fetch("api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:chatLog.filter(m=>m.role!=="error")})}).then(r=>r.json()).catch(()=>({ok:false,error:"ما وصلت للجسر"}));
+ chatBusy=false;
+ if(r.ok){chatLog.push({role:"assistant",content:r.reply||"تم."});if(r.changed){await reloadProject();schedules=null;}}
+ else chatLog.push({role:"error",content:r.error||"صار خطأ"});
+ renderDash();const box=$("#chatMsgs");if(box)box.scrollTop=box.scrollHeight;
+}
+async function reloadProject(){try{const s=await fetch("api/project").then(r=>r.json());if(s&&s.projects&&s.projects.length){const old={};db.projects.forEach(p=>p.devices.forEach(d=>old[d.id]=d.st));db=s;db.projects.forEach(p=>p.devices.forEach(d=>{if(old[d.id])d.st=Object.assign({},d.st,old[d.id]);}));tuyaApply();render();renderDash();}}catch(e){}}
+function editScene(id){
+ const p=P();p.scenes=p.scenes||[];const old=p.scenes.find(s=>s.id===id);
+ const sc=old?JSON.parse(JSON.stringify(old)):{id:uid(),name:"",icon:"sofa",actions:[]};
+ const devs=p.devices.filter(d=>d.type!=="scene");
+ const act=id=>sc.actions.find(a=>a.id===id);
+ sheet(`<header><h2>${old?"تعديل المشهد":"مشهد جديد"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+  <div class="field"><label for="scN">الاسم</label><input id="scN" value="${esc(sc.name)}" placeholder="مثلاً: سينما"></div>
+  <div class="field"><label>الأيقونة</label><div class="types">${SCENE_ICONS.map(([k,n])=>`<button data-ic="${k}" aria-pressed="${sc.icon===k}">${DI[k]}${n}</button>`).join("")}</div></div>
+  <div class="field"><label>الأجهزة <button class="btn" id="scCap" type="button" style="padding:2px 10px;font-size:.78rem">خذ الوضع الحالي</button></label>
+  <div class="devpick" style="max-height:38vh">${devs.map(d=>{const a=act(d.id);const lv=d.type==="dimmer"||(d.type==="tuya"&&d.dimCode);
+   return `<label style="flex-wrap:wrap"><input type="checkbox" data-sa="${d.id}" ${a?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span>
+   <select data-son="${d.id}" style="width:auto;padding:2px 6px;margin-inline-start:auto"><option value="1" ${!a||a.on?"selected":""}>${d.type==="blind"?"تنزل":"تشغيل"}</option><option value="0" ${a&&!a.on?"selected":""}>${d.type==="blind"?"تصعد":"إطفاء"}</option></select>
+   ${lv?`<input type="number" data-slv="${d.id}" min="1" max="100" value="${a&&a.level!=null?a.level:""}" placeholder="%" style="width:64px;padding:2px 6px">`:""}</label>`;}).join("")}</div></div>
+  <div class="actions">${old?`<button class="btn danger" id="scDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="scOk">حفظ</button></div></div>`,s=>{
+  s.querySelectorAll("[data-ic]").forEach(b=>b.onclick=()=>{sc.icon=b.dataset.ic;s.querySelectorAll("[data-ic]").forEach(x=>x.setAttribute("aria-pressed",x===b));if(!$("#scN").value)$("#scN").value=SCENE_ICONS.find(x=>x[0]===sc.icon)[1];});
+  $("#scCap").onclick=()=>{devs.forEach(d=>{const cb=s.querySelector(`[data-sa="${d.id}"]`);cb.checked=true;s.querySelector(`[data-son="${d.id}"]`).value=isOnD(d)?"1":"0";const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv)lv.value=d.st.on?(d.st.level||100):"";});toast("انأخذ وضع كل الأجهزة هسة");};
+  $("#scOk").onclick=()=>{sc.name=$("#scN").value.trim()||"مشهد";sc.actions=devs.filter(d=>s.querySelector(`[data-sa="${d.id}"]`).checked).map(d=>{const a={id:d.id,on:s.querySelector(`[data-son="${d.id}"]`).value==="1"};const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv&&lv.value)a.level=Math.max(1,Math.min(100,+lv.value));if(d.type==="blind")a.position=a.on?100:0;return a;});
+   if(!sc.actions.length){toast("اختار جهاز واحد على الأقل");return;}
+   if(old)p.scenes[p.scenes.indexOf(old)]=sc;else p.scenes.push(sc);saveScenes();close();renderDash();toast("انحفظ المشهد");};
+  const del=$("#scDel");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية";return;}p.scenes=p.scenes.filter(x=>x.id!==sc.id);saveScenes();close();renderDash();};
+ });
+}
+function saveScenes(){ if(role.installer){save();return;}
+ // owner: let the assistant-free path save scenes through the bridge
+ fetch("api/scenes",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:P().id,scenes:P().scenes})}).catch(()=>toast("ما انحفظ المشهد"));}
+async function runScene(id){lastScene=id;renderDash();const r=await fetch("api/scene",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})}).then(r=>r.json()).catch(()=>null);
+ const sc=(P().scenes||[]).find(s=>s.id===id);
+ if(sc)sc.actions.forEach(a=>{const d=P().devices.find(x=>x.id===a.id);if(!d)return;if(d.type==="blind"){d.st.pos=a.on?100:0;}else{d.st.on=a.on;if(a.level!=null)d.st.level=a.level;}});
+ renderDash();renderStage();toast(r&&r.ok?"اشتغل "+(sc?sc.name:"المشهد"):"ما وصل للجسر");}
+async function photoFor(room,file){
+ const url=URL.createObjectURL(file);const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+ const k=Math.min(1,1280/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+ c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);const p=P();p.rooms=p.rooms||{};p.rooms[room]={photo:c.toDataURL("image/jpeg",0.8)};save();renderDash();toast("انحفظت صورة "+room);
+}
+const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["scenes","المشاهد","scenes"],["ai","المساعد","ai"],["map","الخريطة","map"]];
+function renderDash(){
+ const el=$("#dash");if(!el)return;el.hidden=!dashOn;$("#dashBack").hidden=dashOn;if(!dashOn)return;
+ const a=document.activeElement;if(a&&el.contains(a)&&(a.type==="range"||a.tagName==="TEXTAREA")&&dpage!=="ai")return;
+ const draft=$("#chatIn")?$("#chatIn").value:"";
+ const p=P(),now=new Date();const hr=now.getHours();const greet=hr<12?"صباح الخير":hr<18?"أهلاً":"مساء الخير";
+ const titles={home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",scenes:"المشاهد",ai:"مساعد البيت"};
+ const body={home:dashHome,rooms:dashRooms,room:dashRoom,light:()=>grouped(p.devices.filter(isLight))+(p.devices.some(isPlug)?`<div class="dsec">مفاتيح وقواطع ذكية</div>`+tilesHtml(p.devices.filter(isPlug)):""),
+  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),scenes:dashScenes,ai:dashChat}[dpage]||dashHome;
+ const lightsOn=p.devices.filter(d=>isLight(d)&&d.st.on).length;
+ el.innerHTML=`<nav class="dside"><div class="dbrand">${DI.home}<span>${esc(p.name||"البيت")}</span></div>
+  ${DPAGES.map(([k,n,ic])=>`<button class="dnav" data-dp="${k}" aria-current="${dpage===k||(dpage==="room"&&k==="rooms")}">${DI[ic]}${n}</button>`).join("")}
+  <span class="sp"></span>${role.locked?`<button class="dnav" id="dLock">${DI.lock}${role.installer?"خروج الفني":"الفني"}</button>`:""}</nav>
+  <main class="dmain"><div class="dhead"><div><h1>${esc(titles[dpage]||"")}</h1><div class="sub">${dpage==="home"?esc(p.name||"")+" · "+now.toLocaleDateString("ar-IQ",{weekday:"long",day:"numeric",month:"long"}):dpage==="room"?`<a href="#" data-dp="rooms" style="color:var(--d-acc)">‹ كل الغرف</a>`:""}</div></div>
+  <div class="dchips"><span class="dchip">💡 <b>${lightsOn}</b> شغّال</span><span class="dchip">${knxState==="connected"?"🟢 متصل":"🔴 غير متصل"}</span></div></div>${body()}</main>`;
+ const ci=$("#chatIn");if(ci){ci.value=draft;}
+ const box=$("#chatMsgs");if(box)box.scrollTop=box.scrollHeight;
+}
+function dashClick(e){
+ const t=e.target;const q=s=>t.closest(s);let b;
+ if(q("[data-noopen]")){return;}
+ if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;renderDash();return;}
+ if(b=q("#dLock")){$("#instBtn").click();return;}
+ if(b=q("[data-go]")){dpage=b.dataset.go;renderDash();return;}
+ if(b=q("[data-room]")){if(!b.dataset.room)return;droom=b.dataset.room;dpage="room";renderDash();return;}
+ if(b=q("[data-dt]")){const d=P().devices.find(x=>x.id===b.dataset.dt);if(!d)return;
+  if(d.type==="switch"||(d.type==="tuya"&&!d.dimCode&&!tuyaFeat(d).temp&&!tuyaFeat(d).colour&&tuyaFeat(d).power==null)){devSet(d,!d.st.on);refresh();renderDash();}else operate(d);return;}
+ if(b=q("[data-vs]")){runScene(b.dataset.vs);return;}
+ if(b=q("[data-ks]")){const d=P().devices.find(x=>x.id===b.dataset.ks);if(d){devSet(d,true);toast("انرسل "+d.name);}return;}
+ if(b=q("[data-alloff]")){$("#allOff").classList.add("armed");$("#allOff").click();lastScene="";setTimeout(renderDash,300);return;}
+ if(b=q("[data-pw]")){const d=P().devices.find(x=>x.id===b.dataset.pw);devSet(d,!d.st.on);refresh();renderDash();return;}
+ if(b=q("[data-sp]")){const d=P().devices.find(x=>x.id===b.dataset.sp);const v=Math.max(16,Math.min(30,(d.st.setpoint||22)+ +b.dataset.d));devSetpoint(d,v);refresh();renderDash();return;}
+ if(b=q("[data-tg]")){const d=P().devices.find(x=>x.id===b.dataset.tg);devSet(d,!d.st.on);refresh();renderDash();return;}
+ if(b=q("[data-roomoff2]")){P().devices.filter(d=>d.room===b.dataset.roomoff2&&d.st.on&&d.type!=="scene").forEach(d=>devSet(d,false));refresh();renderDash();return;}
+ if(b=q("[data-newscene]")){editScene(null);return;}
+ if(b=q("[data-edscene]")){editScene(b.dataset.edscene);return;}
+ if(b=q("[data-sg]")){sendChat(b.dataset.sg);return;}
+}
+function dashChange(e){
+ const t=e.target;
+ if(t.dataset.lv){const d=P().devices.find(x=>x.id===t.dataset.lv);if(d.type==="dimmer"&&+t.value>0&&!d.st.on)devSet(d,true);devLevel(d,+t.value);refresh();t.blur();renderDash();}
+ if(t.dataset.ps){const d=P().devices.find(x=>x.id===t.dataset.ps);devLevel(d,+t.value);refresh();t.blur();renderDash();}
+ if(t.dataset.photo&&t.files[0]){photoFor(t.dataset.photo,t.files[0]);}
+}
+function dashInput(e){const t=e.target;if(t.dataset.lv||t.dataset.ps){const s=t.parentElement.querySelector("span");if(s)s.textContent=t.value+"%";}}
 
 /* ---------- schedules (run by the bridge, also when no page is open) ---------- */
 let schedules=null,holiday={enabled:false,devices:[]},sunT={};
@@ -954,12 +1268,20 @@ $("#tDev").onclick=()=>{tab="dev";renderPane();};
 $("#tGa").onclick=()=>{tab="ga";renderPane();};
 $("#tLog").onclick=()=>{tab="log";renderPane();};
 $("#tSch").onclick=()=>{tab="sch";renderPane();};
+$("#dash").addEventListener("click",dashClick);
+$("#dash").addEventListener("change",dashChange);
+$("#dash").addEventListener("input",dashInput);
+$("#dash").addEventListener("submit",e=>{e.preventDefault();sendChat($("#chatIn").value);});
+$("#dash").addEventListener("keydown",e=>{if(e.target.id==="chatIn"&&e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat(e.target.value);}});
+$("#dashBack").onclick=()=>{dashOn=true;try{localStorage.setItem("knx-dash","1");}catch(_){}renderDash();renderStage();};
+try{dashOn=localStorage.getItem("knx-dash")!=="0";}catch(e){}
+setInterval(()=>{if(dashOn&&dpage==="home")renderDash();},60000);
 $("#vw2").onclick=()=>{view3d=false;try{localStorage.setItem("knx-view","2d");}catch(e){}renderStage();};
 $("#vw3").onclick=()=>{if(!P().plan){toast("ارفع خريطة أول");return;}view3d=true;try{localStorage.setItem("knx-view","3d");}catch(e){}renderStage();};
 try{view3d=localStorage.getItem("knx-view")==="3d";}catch(e){}
 
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;}).catch(()=>{})
-.then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();});
+.then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());});
 })();
 </script>
 </body>

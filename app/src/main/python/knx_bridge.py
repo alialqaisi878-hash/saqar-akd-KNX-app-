@@ -29,6 +29,10 @@ try:
     from tuya_cloud import TuyaCloud, TuyaError
 except ImportError:  # file missing next to the bridge
     TuyaCloud = None
+try:
+    import assistant
+except ImportError:
+    assistant = None
 
 import time
 if hasattr(time, "tzset"):
@@ -221,6 +225,239 @@ async def run_action(dev: dict, on: bool) -> None:
         send_write(ga["scene"], "17.001", int(dev.get("sceneNo") or 1))
 
 
+async def run_value(dev: dict, kind: str, v: float) -> None:
+    """level (0-100), setpoint (deg C) or position (0-100) for one device."""
+    t, ga = dev.get("type"), dev.get("ga") or {}
+    v = float(v)
+    if t == "tuya":
+        if tuya is None or not dev.get("tuyaId"):
+            return
+        if kind == "level" and dev.get("dimCode"):
+            a, b = float(dev.get("dimMin", 10)), float(dev.get("dimMax", 1000))
+            cmds = [{"code": dev["code"], "value": v > 0}]
+            if v > 0:
+                cmds.append({"code": dev["dimCode"], "value": int(round(a + (b - a) * min(100, v) / 100))})
+            await tuya_send(dev["tuyaId"], cmds)
+        else:
+            await tuya_send(dev["tuyaId"], dev["code"], v > 0)
+        return
+    if status["state"] != "connected":
+        raise RuntimeError("KNX not connected")
+    if kind == "level" and ga.get("value"):
+        send_write(ga["value"], "5.001", int(max(0, min(100, v))))
+    elif kind == "level" and ga.get("cmd"):
+        send_write(ga["cmd"], "1.001", 1 if v > 0 else 0)
+    elif kind == "setpoint" and ga.get("setpoint"):
+        send_write(ga["setpoint"], "9.001", v)
+    elif kind == "position" and ga.get("position"):
+        send_write(ga["position"], "5.001", int(max(0, min(100, v))))
+    else:
+        raise RuntimeError(f"{dev.get('name')}: ما بيه عنوان لهذا الأمر")
+
+
+def load_db() -> dict:
+    try:
+        return json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {"projects": []}
+
+
+def cur_project(db: dict) -> dict:
+    prs = db.get("projects") or []
+    for pr in prs:
+        if pr.get("id") == db.get("current"):
+            return pr
+    if not prs:
+        prs.append({"id": "home", "name": "البيت", "devices": [], "gas": []})
+        db["projects"] = prs
+        db["current"] = "home"
+    return prs[0]
+
+
+def save_db(db: dict) -> None:
+    PROJECT_FILE.write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+    load_links()
+    broadcast({"t": "project"})
+
+
+async def run_scene_actions(scene: dict) -> int:
+    n = 0
+    for a in scene.get("actions", []):
+        d = find_device(a.get("id", ""))
+        if d is None:
+            continue
+        try:
+            if not a.get("on"):
+                await run_action(d, False)
+            elif a.get("level") is not None and d.get("type") in ("dimmer", "tuya"):
+                if d.get("type") == "dimmer":
+                    await run_action(d, True)
+                await run_value(d, "level", a["level"])
+            elif a.get("position") is not None and d.get("type") == "blind":
+                await run_value(d, "position", a["position"])
+            elif a.get("setpoint") is not None and d.get("type") == "hvac":
+                await run_action(d, True)
+                await run_value(d, "setpoint", a["setpoint"])
+            else:
+                await run_action(d, True)
+            n += 1
+        except Exception as err:  # noqa: BLE001
+            log.warning("scene %s: %s %s", scene.get("name"), d.get("name"), err)
+        await asyncio.sleep(0.08)
+    return n
+
+
+def find_scene(sid: str):
+    for pr in load_db().get("projects", []):
+        for sc in pr.get("scenes", []) or []:
+            if sc.get("id") == sid:
+                return sc
+    return None
+
+
+async def put_scenes(req):
+    """The owner can save scenes (not the rest of the project)."""
+    data = await req.json()
+    db = load_db()
+    for pr in db.get("projects", []):
+        if pr.get("id") == data.get("project") and isinstance(data.get("scenes"), list):
+            pr["scenes"] = data["scenes"]
+            PROJECT_FILE.write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+            return web.json_response({"ok": True})
+    return web.json_response({"ok": False}, status=404)
+
+
+async def scene_run(req):
+    sc = find_scene((await req.json()).get("id", ""))
+    if sc is None:
+        return web.json_response({"ok": False, "error": "no scene"}, status=404)
+    n = await run_scene_actions(sc)
+    return web.json_response({"ok": True, "count": n})
+
+
+def new_id() -> str:
+    import uuid
+    return uuid.uuid4().hex[:8]
+
+
+class AssistantCtx:
+    async def call(self, name: str, a: dict, installer: bool):
+        db = load_db()
+        pr = cur_project(db)
+        if name == "get_house":
+            sf = load_sched_file()
+            sun = sun_times()
+            return {
+                "house": pr.get("name"),
+                "devices": [{k: d.get(k) for k in ("id", "name", "type", "room", "ga", "sceneNo", "tuyaId", "tuyaName", "code", "dimCode")}
+                            | {"on": (d.get("st") or {}).get("on"), "level": (d.get("st") or {}).get("level")}
+                            for d in pr.get("devices", [])],
+                "scenes": pr.get("scenes", []),
+                "schedules": sf.get("schedules", []),
+                "holiday": sf.get("holiday", {}),
+                "sun": {k: v.strftime("%H:%M") for k, v in sun.items()},
+                "ets_addresses": [{"addr": g.get("addr"), "name": g.get("name"), "dpt": g.get("dpt")} for g in (pr.get("gas") or [])[:600]],
+                "tuya_devices": [{"id": t["id"], "name": t["name"], "status": t["status"]} for t in tuya_cache.values()][:80],
+                "knx_connected": status["state"] == "connected",
+            }
+        if name == "control":
+            out = []
+            for did in a.get("device_ids", []):
+                d = find_device(did)
+                if d is None:
+                    out.append(f"{did}: مو موجود")
+                    continue
+                act = a.get("action")
+                if act in ("on", "off"):
+                    await run_action(d, act == "on")
+                else:
+                    await run_value(d, act, a.get("value", 0))
+                out.append(f"{d.get('name')}: تم")
+            return out
+        if name == "run_scene":
+            sc = find_scene(a.get("scene_id", ""))
+            if sc is None:
+                raise RuntimeError("المشهد مو موجود")
+            return {"ran": await run_scene_actions(sc)}
+        if name == "save_scene":
+            scs = pr.setdefault("scenes", [])
+            sc = {"id": a.get("id") or new_id(), "name": a["name"], "icon": a.get("icon", "star"), "actions": a.get("actions", [])}
+            i = next((k for k, x in enumerate(scs) if x.get("id") == sc["id"]), None)
+            if i is None:
+                scs.append(sc)
+            else:
+                scs[i] = sc
+            save_db(db)
+            return {"saved": sc["id"]}
+        if name == "delete_scene":
+            pr["scenes"] = [x for x in pr.get("scenes", []) if x.get("id") != a.get("scene_id")]
+            save_db(db)
+            return "ok"
+        if name in ("save_schedule", "delete_schedule", "set_holiday"):
+            f = load_sched_file()
+            schs = f.setdefault("schedules", [])
+            if name == "save_schedule":
+                sc = {"id": a.get("id") or new_id(), "name": a.get("name", ""), "at": a.get("at", "time"),
+                      "time": a.get("time", "19:00"), "offset": int(a.get("offset") or 0),
+                      "days": a.get("days") or [0, 1, 2, 3, 4, 5, 6], "on": a.get("on", True),
+                      "devices": a.get("devices", []), "enabled": a.get("enabled", True)}
+                if a.get("scene_id"):
+                    sc["scene_id"] = a["scene_id"]
+                i = next((k for k, x in enumerate(schs) if x.get("id") == sc["id"]), None)
+                if i is None:
+                    schs.append(sc)
+                else:
+                    schs[i] = sc
+            elif name == "delete_schedule":
+                f["schedules"] = [x for x in schs if x.get("id") != a.get("schedule_id")]
+            else:
+                h = f.setdefault("holiday", {"enabled": False, "devices": []})
+                h["enabled"] = bool(a.get("enabled"))
+                if a.get("devices"):
+                    h["devices"] = a["devices"]
+            SCHED_FILE.write_text(json.dumps(f, ensure_ascii=False), encoding="utf-8")
+            broadcast({"t": "schedules"})
+            return "ok"
+        if name in ("save_device", "delete_device"):
+            if not installer:
+                raise RuntimeError("هذا للفني بس")
+            devs = pr.setdefault("devices", [])
+            if name == "delete_device":
+                pr["devices"] = [x for x in devs if x.get("id") != a.get("device_id")]
+            else:
+                old = next((x for x in devs if x.get("id") == a.get("id")), None) if a.get("id") else None
+                d = old or {"id": new_id(), "x": 50, "y": 50, "ga": {}, "sceneNo": 1,
+                            "st": {"on": False, "level": 0, "pos": 0, "setpoint": 22, "temp": 25}}
+                for k in ("name", "type", "room", "sceneNo", "tuyaId", "code", "dimCode", "x", "y"):
+                    if a.get(k) is not None:
+                        d[k] = a[k]
+                if isinstance(a.get("ga"), dict):
+                    d["ga"] = {**(d.get("ga") or {}), **a["ga"]}
+                if d.get("type") == "tuya" and d.get("dimCode") and "dimMin" not in d:
+                    d["dimMin"], d["dimMax"] = (25, 255) if d["dimCode"] == "bright_value" else (10, 1000)
+                if old is None:
+                    devs.append(d)
+            save_db(db)
+            return "ok"
+        raise RuntimeError("unknown tool")
+
+
+AI_KEY = str(CFG.get("assistant_api_key") or CFG.get("anthropic_api_key") or "").strip()
+
+
+async def assistant_chat(req):
+    if assistant is None or not AI_KEY:
+        return web.json_response({"ok": False, "error": "المساعد مو مفعّل: اكتب مفتاح المساعد بإعدادات KNX Prog"})
+    data = await req.json()
+    try:
+        res = await assistant.chat(AI_KEY, str(CFG.get("assistant_model") or "claude-sonnet-5-5"),
+                                   data.get("messages", []), AssistantCtx(), is_installer(req))
+    except Exception as err:  # noqa: BLE001
+        log.warning("assistant: %s", err)
+        return web.json_response({"ok": False, "error": str(err)})
+    return web.json_response({"ok": True, **res})
+
+
 async def holiday_step(now, sun: dict, state: dict) -> None:
     """Presence simulation: while away, random lights go on and off in the evening like someone is home."""
     import datetime
@@ -272,6 +509,12 @@ async def schedule_loop() -> None:
                     continue
                 days = s.get("days") or [0, 1, 2, 3, 4, 5, 6]
                 if wd not in days:
+                    continue
+                if s.get("scene_id"):
+                    sc = find_scene(s["scene_id"])
+                    if sc:
+                        await run_scene_actions(sc)
+                        log.info("schedule %s: scene %s", s.get("name", ""), sc.get("name"))
                     continue
                 for dev_id in s.get("devices", []):
                     dev = find_device(dev_id)
@@ -479,6 +722,7 @@ async def bridge_info(_req):
     return web.json_response({
         "knx": status, "relay": relay_state, "link": remote_url["url"],
         "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
+        "assistant": bool(AI_KEY),
     })
 
 
@@ -845,6 +1089,9 @@ async def main() -> None:
         web.get("/three.js", three_js),
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
+        web.post("/api/scene", scene_run),
+        web.put("/api/scenes", put_scenes),
+        web.post("/api/assistant", assistant_chat),
         web.post("/api/installer", installer_login),
         web.post("/api/installer/logout", installer_logout),
         web.put("/api/project", put_project),
