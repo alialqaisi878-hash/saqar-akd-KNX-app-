@@ -23,6 +23,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -57,6 +58,9 @@ public class ControlActivity extends Activity {
         l.setPadding(56, 56, 56, 56);
         l.setBackgroundColor(Color.parseColor("#0a1211"));
 
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_tat);
+        l.addView(logo, new LinearLayout.LayoutParams(-1, 260));
         l.addView(text("TAT SMART", 30, "#3fd0b0"));
         l.addView(text("اكتب اسم البيت اللي انطاك ياه الفني", 15, "#94a3b8"));
         EditText house = new EditText(this);
