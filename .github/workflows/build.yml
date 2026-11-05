@@ -43,6 +43,7 @@ jobs:
           mkdir -p /tmp/out
           cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/KNXProg.apk
           cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/SaqarKNX.apk
+          cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/TATSMART.apk
           cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/AKDKNX.apk
           cd /tmp/out
           git init -q -b apk

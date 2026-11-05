@@ -31,7 +31,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 /**
- * AKD KNX: the control app for the home owner (phone) or the wall screen.
+ * TAT SMART: the control app for the home owner (phone) or the wall screen.
  * It only opens the house page: the company link from anywhere, or the bridge on this device.
  */
 public class ControlActivity extends Activity {
@@ -55,9 +55,9 @@ public class ControlActivity extends Activity {
         l.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         l.setGravity(Gravity.CENTER_VERTICAL);
         l.setPadding(56, 56, 56, 56);
-        l.setBackgroundColor(Color.parseColor("#0f172a"));
+        l.setBackgroundColor(Color.parseColor("#0a1211"));
 
-        l.addView(text("AKD KNX", 30, "#7dd3fc"));
+        l.addView(text("TAT SMART", 30, "#3fd0b0"));
         l.addView(text("اكتب اسم البيت اللي انطاك ياه الفني", 15, "#94a3b8"));
         EditText house = new EditText(this);
         house.setHint("مثلاً ahmed-villa");
@@ -99,7 +99,7 @@ public class ControlActivity extends Activity {
         if (isLocal) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0f172a"));
+        root.setBackgroundColor(Color.parseColor("#0a1211"));
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
@@ -108,7 +108,7 @@ public class ControlActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (!r.isForMainFrame()) return;
-                v.loadData("<html><body style='background:#0f172a;color:#e2e8f0;font-family:sans-serif;display:flex;"
+                v.loadData("<html><body style='background:#0a1211;color:#e2e8f0;font-family:sans-serif;display:flex;"
                         + "align-items:center;justify-content:center;height:100vh;text-align:center'><div dir='rtl'>"
                         + "<h2>ما يوصل للبيت</h2><p>تأكد من النت. دا يعيد المحاولة...</p></div></body></html>",
                         "text/html; charset=utf-8", "UTF-8");

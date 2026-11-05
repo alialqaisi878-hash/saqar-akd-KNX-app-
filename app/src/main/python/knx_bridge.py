@@ -781,12 +781,13 @@ async def installer_logout(_req):
     return resp
 
 LOGIN_HTML = """<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>دخول</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>TAT SMART</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="tat-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TAT SMART"><meta name="theme-color" content="#0a1211">
 <style>body{font-family:system-ui,Tahoma,sans-serif;background:#0f172a;color:#e2e8f0;display:grid;place-items:center;min-height:100vh;margin:0}
 form{background:#1e293b;padding:28px;border-radius:14px;width:min(320px,90vw);display:grid;gap:12px}
 input,button{font:inherit;padding:12px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:inherit}
 button{background:#2563eb;border:0;font-weight:600}</style></head><body>
-<form method="post" action="login"><b>خريطة KNX</b><span>اكتب كلمة السر</span>
+<form method="post" action="login"><img src="tat-192.png" alt="" style="width:84px;height:84px;border-radius:20px;justify-self:center"><b style="text-align:center">TAT SMART</b><span>اكتب كلمة السر</span>
 <input type="password" name="pw" autofocus>%s<button>دخول</button></form></body></html>"""
 
 
@@ -803,7 +804,7 @@ def authed(req) -> bool:
 
 @web.middleware
 async def auth_mw(req, handler):
-    if req.path in ("/login", "/ping") or not is_remote(req) or authed(req) or (INSTALLER_PW and is_installer(req)):
+    if req.path in ("/login", "/ping") or req.path in PUBLIC_FILES or not is_remote(req) or authed(req) or (INSTALLER_PW and is_installer(req)):
         return await handler(req)
     if not REMOTE_PW:
         return web.Response(status=403, text="Remote access needs remote_password in config.json")
@@ -1027,6 +1028,27 @@ async def three_js(_req):
                             headers={"Cache-Control": "max-age=86400"})
 
 
+PUBLIC_FILES = ("/manifest.webmanifest", "/tat-180.png", "/tat-192.png", "/tat-512.png")
+MANIFEST = {
+    "name": "TAT SMART", "short_name": "TAT SMART", "lang": "ar", "dir": "rtl",
+    "start_url": "./", "scope": "./", "display": "standalone",
+    "background_color": "#0a1211", "theme_color": "#0a1211",
+    "icons": [{"src": "tat-192.png", "sizes": "192x192", "type": "image/png"},
+              {"src": "tat-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}],
+}
+
+
+async def manifest(_req):
+    return web.json_response(MANIFEST, content_type="application/manifest+json")
+
+
+async def app_icon(req):
+    f = Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / req.path.lstrip("/")
+    if not f.exists():
+        raise web.HTTPNotFound()
+    return web.FileResponse(f, headers={"Cache-Control": "max-age=86400"})
+
+
 async def index(_req):
     return web.FileResponse(Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / "index.html")
 
@@ -1119,6 +1141,8 @@ async def main() -> None:
         web.get("/api/tuya/spec", tuya_spec),
         web.get("/api/schedules", get_schedules),
         web.get("/three.js", three_js),
+        web.get("/manifest.webmanifest", manifest),
+        web.get("/tat-{n:(180|192|512)}.png", app_icon),
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
         web.post("/api/scene", scene_run),

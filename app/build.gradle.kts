@@ -10,8 +10,8 @@ android {
         applicationId = "iq.saqar.knx"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "3.3"
+        versionCode = 11
+        versionName = "3.4"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     compileOptions {
