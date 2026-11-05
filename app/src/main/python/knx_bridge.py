@@ -1364,7 +1364,7 @@ async def three_js(_req):
 PUBLIC_FILES = ("/manifest.webmanifest", "/tat-180.png", "/tat-192.png", "/tat-512.png")
 MANIFEST = {
     "name": "TAT SMART", "short_name": "TAT SMART", "lang": "ar", "dir": "rtl",
-    "start_url": "./", "scope": "./", "display": "standalone",
+    "start_url": "./?app=tat", "scope": "./", "display": "standalone",
     "background_color": "#0a101c", "theme_color": "#0a101c",
     "icons": [{"src": "tat-192.png", "sizes": "192x192", "type": "image/png"},
               {"src": "tat-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}],

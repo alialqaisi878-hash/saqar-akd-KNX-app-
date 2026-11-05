@@ -1668,6 +1668,8 @@ $("#newProj").onclick=()=>{
   $("#pOk").onclick=go;i.onkeydown=e=>{if(e.key==="Enter")go();};
  });
 };
+// TAT SMART (the customer app, or the iPhone home-screen icon) never shows anything for the technician
+const CUSTOMER_APP=(()=>{try{if(/TATSMART/.test(navigator.userAgent))return true;if(new URLSearchParams(location.search).get("app")==="tat"){sessionStorage.setItem("tat-app","1");return true;}if(sessionStorage.getItem("tat-app")==="1")return true;return !!(navigator.standalone||matchMedia("(display-mode: standalone)").matches);}catch(e){return false;}})();
 // ---- installer lock: the home owner only sees "use" mode
 function applyRole(){
  const inst=role.installer;
@@ -1715,7 +1717,7 @@ $("#vw2").onclick=()=>{view3d=false;try{localStorage.setItem("knx-view","2d");}c
 $("#vw3").onclick=()=>{if(!P().plan){toast("ارفع خريطة أول");return;}view3d=true;try{localStorage.setItem("knx-view","3d");}catch(e){}renderStage();};
 try{view3d=localStorage.getItem("knx-view")==="3d";}catch(e){}
 
-fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;}).catch(()=>{})
+fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;if(CUSTOMER_APP){if(role.installer&&role.locked)fetch("api/installer/logout",{method:"POST"}).catch(()=>{});role={installer:false,locked:false};}}).catch(()=>{})
 .then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());});
 })();
 </script>

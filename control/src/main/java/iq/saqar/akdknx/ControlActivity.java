@@ -56,7 +56,7 @@ public class ControlActivity extends Activity {
         l.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         l.setGravity(Gravity.CENTER_VERTICAL);
         l.setPadding(56, 56, 56, 56);
-        l.setBackgroundColor(Color.parseColor("#0a1211"));
+        l.setBackgroundColor(Color.parseColor("#0a101c"));
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.ic_tat);
@@ -103,16 +103,18 @@ public class ControlActivity extends Activity {
         if (isLocal) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0a1211"));
+        root.setBackgroundColor(Color.parseColor("#0a101c"));
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        // tells the page it runs inside TAT SMART: customer controls only, no technician login
+        web.getSettings().setUserAgentString(web.getSettings().getUserAgentString() + " TATSMART");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         web.setWebViewClient(new WebViewClient() {
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (!r.isForMainFrame()) return;
-                v.loadData("<html><body style='background:#0a1211;color:#e2e8f0;font-family:sans-serif;display:flex;"
+                v.loadData("<html><body style='background:#0a101c;color:#e2e8f0;font-family:sans-serif;display:flex;"
                         + "align-items:center;justify-content:center;height:100vh;text-align:center'><div dir='rtl'>"
                         + "<h2>ما يوصل للبيت</h2><p>تأكد من النت. دا يعيد المحاولة...</p></div></body></html>",
                         "text/html; charset=utf-8", "UTF-8");
