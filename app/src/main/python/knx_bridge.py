@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import urllib.request
 import logging
@@ -176,6 +177,8 @@ async def solar_loop() -> None:
             try:
                 solar_data = await solis.snapshot()
                 solar_state.update(state="connected", detail=solar_data.get("name", ""))
+                energy_note(solar_data)
+                asyncio.ensure_future(auto_event({"solar": solar_data}))
                 broadcast({"t": "solar", "data": solar_data, "state": solar_state})
             except Exception as err:  # noqa: BLE001
                 solar_state.update(state="error", detail=str(err))
@@ -451,6 +454,243 @@ async def discover_cams(req):
 
 
 # ---------------------------------------------------------------- schedules
+# ---------------- automations: rules, arriving home, phone notifications, energy history ----------------
+AUTO_FILE = DATA / "automations.json"
+ENERGY_FILE = DATA / "energy.json"
+auto_state: dict = {}   # rule id -> {"on": bool, "last": ts}
+ga_cache: dict = {}     # ga -> last value seen on the bus (bool or float)
+notify_log: list = []   # last notifications, newest first
+
+
+def load_auto() -> dict:
+    try:
+        a = json.loads(AUTO_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        a = {}
+    a.setdefault("rules", [])
+    a.setdefault("home", {})            # {"lat","lng","radius"}
+    a.setdefault("notify", {"on": False, "topic": ""})
+    a.setdefault("people", [])          # names seen arriving/leaving
+    if not a.get("token"):
+        a["token"] = secrets.token_urlsafe(16)
+        AUTO_FILE.write_text(json.dumps(a, ensure_ascii=False), encoding="utf-8")
+    if not a["notify"].get("topic"):
+        a["notify"]["topic"] = "tat-" + secrets.token_hex(6)
+        AUTO_FILE.write_text(json.dumps(a, ensure_ascii=False), encoding="utf-8")
+    return a
+
+
+AUTO = load_auto()
+
+
+def save_auto() -> None:
+    AUTO_FILE.write_text(json.dumps(AUTO, ensure_ascii=False), encoding="utf-8")
+
+
+async def notify(title: str, body: str, tag: str = "house") -> None:
+    """Push to the owner's phones through ntfy (free app on iPhone and Android, no account)."""
+    notify_log.insert(0, {"t": time.strftime("%Y-%m-%d %H:%M"), "title": title, "body": body})
+    del notify_log[30:]
+    broadcast({"t": "notify", "title": title, "body": body})
+    n = AUTO.get("notify", {})
+    if not n.get("on") or not n.get("topic"):
+        return
+    base = (n.get("server") or "https://ntfy.sh").rstrip("/")
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+            await s.post(base + "/", json={"topic": n["topic"], "title": title, "message": body, "tags": [tag]})
+    except Exception as err:  # noqa: BLE001
+        log.warning("notify: %s", err)
+
+
+def rule_text(r: dict) -> str:
+    w = r.get("when", {})
+    t = w.get("type")
+    v = w.get("value")
+    return {
+        "arrive": f"وصل {w.get('who') or 'أحد'} للبيت",
+        "leave": f"طلع {w.get('who') or 'أحد'} من البيت",
+        "solar_export": f"الطاقة فايضة أكثر من {v} kW",
+        "battery_low": f"البطارية نزلت تحت {v}%",
+        "battery_full": f"البطارية فوك {v}%",
+        "temp_above": f"الحرارة صارت فوك {v}°",
+        "temp_below": f"الحرارة نزلت تحت {v}°",
+        "ga_on": f"{w.get('label') or w.get('ga')} اشتغل",
+        "ga_off": f"{w.get('label') or w.get('ga')} طفى",
+    }.get(t, t or "")
+
+
+async def fire_rule(r: dict, why: str) -> None:
+    st = auto_state.setdefault(r["id"], {"on": False, "last": 0})
+    cd = max(1, int(r.get("cooldown") or 10)) * 60
+    if time.time() - st["last"] < cd:
+        return
+    st["last"] = time.time()
+    done = ""
+    then = r.get("then", {})
+    sc = find_scene(then.get("scene", "")) if then.get("scene") else None
+    if sc is not None:
+        await run_scene_actions(sc)
+        done = f" ← شغّلت مشهد {sc.get('name', '')}"
+    log.info("rule %s fired (%s)%s", r.get("name"), why, done)
+    if then.get("notify", True):
+        await notify(r.get("name") or "TAT SMART", why + done)
+
+
+def level_true(w: dict, ctx: dict):
+    """True/False for level rules, None when this event says nothing about the rule."""
+    t, v = w.get("type"), float(w.get("value") or 0)
+    if t in ("solar_export", "battery_low", "battery_full") and "solar" in ctx:
+        d = ctx["solar"] or {}
+        if t == "solar_export" and d.get("grid") is not None:
+            return d["grid"] >= v
+        if d.get("soc") is None:
+            return None
+        return d["soc"] <= v if t == "battery_low" else d["soc"] >= v
+    if t in ("temp_above", "temp_below") and ctx.get("ga") and ctx.get("ga") == w.get("ga") and isinstance(ctx.get("value"), float):
+        return ctx["value"] >= v if t == "temp_above" else ctx["value"] <= v
+    if t in ("ga_on", "ga_off") and ctx.get("ga") and ctx.get("ga") == w.get("ga") and isinstance(ctx.get("value"), bool):
+        return ctx["value"] if t == "ga_on" else not ctx["value"]
+    return None
+
+
+async def auto_event(ctx: dict) -> None:
+    for r in list(AUTO.get("rules", [])):
+        if not r.get("on", True) or not r.get("id"):
+            continue
+        w = r.get("when", {})
+        if ctx.get("geo") and w.get("type") == ctx["geo"]:
+            who = (w.get("who") or "").strip()
+            if not who or who == ctx.get("who"):
+                await fire_rule(r, rule_text({"when": {"type": ctx["geo"], "who": ctx.get("who")}}))
+            continue
+        now = level_true(w, ctx)
+        if now is None:
+            continue
+        st = auto_state.setdefault(r["id"], {"on": False, "last": 0})
+        was, st["on"] = st["on"], now
+        if now and not was:
+            await fire_rule(r, rule_text(r))
+
+
+def ga_value(msg: dict, dpt: str):
+    main = str(dpt or "").split(".")[0]
+    if "bit" in msg:
+        return bool(msg["bit"])
+    b = msg.get("bytes") or []
+    if main == "9" and len(b) >= 2:
+        raw = (b[0] << 8) | b[1]
+        m = raw & 0x7FF
+        if raw & 0x8000:
+            m -= 2048
+        return round(m * (2 ** ((raw >> 11) & 0xF)) / 100, 2)
+    if main == "1" and b:
+        return bool(b[0])
+    return None
+
+
+def auto_on_telegram(msg: dict) -> None:
+    rules = [r for r in AUTO.get("rules", []) if r.get("when", {}).get("ga") == msg["ga"]]
+    if not rules:
+        return
+    t = rules[0]["when"].get("type", "")
+    v = ga_value(msg, "9.001" if t.startswith("temp") else "1.001")
+    if v is None:
+        return
+    ga_cache[msg["ga"]] = v
+    asyncio.ensure_future(auto_event({"ga": msg["ga"], "value": v}))
+
+
+def energy_note(d: dict) -> None:
+    """Keep one line per day with the inverter's own day totals (for the week / month report)."""
+    if not d or not d.get("today"):
+        return
+    try:
+        hist = json.loads(ENERGY_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        hist = {}
+    hist[time.strftime("%Y-%m-%d")] = {k: d["today"].get(k) for k in ("pv", "load", "buy", "sell", "charge", "discharge")}
+    for k in sorted(hist)[:-400]:
+        del hist[k]
+    ENERGY_FILE.write_text(json.dumps(hist), encoding="utf-8")
+
+
+def hook_ok(req) -> bool:
+    k = req.query.get("k") or req.headers.get("X-Tat-Token") or ""
+    return bool(k) and secrets.compare_digest(k, AUTO.get("token", ""))
+
+
+async def get_auto(req):
+    out = {k: AUTO.get(k) for k in ("rules", "home", "notify", "people")}
+    out["token"] = AUTO.get("token")
+    out["log"] = notify_log[:15]
+    return web.json_response(out)
+
+
+async def put_auto(req):
+    """The owner edits rules, the home pin and notifications (not the token)."""
+    data = await req.json()
+    if isinstance(data.get("rules"), list):
+        AUTO["rules"] = [r for r in data["rules"] if isinstance(r, dict) and r.get("id")][:60]
+    if isinstance(data.get("home"), dict):
+        h = data["home"]
+        try:
+            AUTO["home"] = {"lat": float(h["lat"]), "lng": float(h["lng"]), "radius": max(50, min(5000, int(h.get("radius") or 150)))}
+        except Exception:  # noqa: BLE001
+            AUTO["home"] = {}
+    if isinstance(data.get("notify"), dict):
+        AUTO["notify"]["on"] = bool(data["notify"].get("on"))
+    if data.get("new_token"):
+        AUTO["token"] = secrets.token_urlsafe(16)
+    save_auto()
+    return web.json_response({"ok": True, "token": AUTO["token"]})
+
+
+async def geo_hook(req):
+    """Phone says it arrived or left: from TAT SMART (Android) or an iPhone Shortcuts automation."""
+    q = dict(req.query)
+    if req.method == "POST":
+        try:
+            q.update(await req.json())
+        except Exception:  # noqa: BLE001
+            pass
+    ev = {"arrive": "arrive", "in": "arrive", "enter": "arrive", "leave": "leave", "out": "leave", "exit": "leave"}.get(str(q.get("e") or q.get("event") or "").lower())
+    if not ev:
+        return web.json_response({"ok": False, "error": "e=arrive or e=leave"}, status=400)
+    who = str(q.get("who") or "").strip()[:30]
+    if who and who not in AUTO["people"]:
+        AUTO["people"].append(who)
+        save_auto()
+    await auto_event({"geo": ev, "who": who})
+    return web.json_response({"ok": True, "event": ev})
+
+
+async def scene_hook(req):
+    """Run a scene from a link (Siri Shortcuts, widgets): /api/hook/scene?k=TOKEN&name=سينما"""
+    want = (req.query.get("id") or "").strip()
+    name = (req.query.get("name") or "").strip()
+    for pr in load_db().get("projects", []):
+        for sc in pr.get("scenes", []) or []:
+            if (want and sc.get("id") == want) or (name and sc.get("name", "").strip() == name):
+                n = await run_scene_actions(sc)
+                return web.json_response({"ok": True, "scene": sc.get("name"), "count": n})
+    return web.json_response({"ok": False, "error": "no scene"}, status=404)
+
+
+async def get_energy(_req):
+    try:
+        hist = json.loads(ENERGY_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        hist = {}
+    return web.json_response({"days": hist})
+
+
+async def test_notify(_req):
+    await notify("TAT SMART", "تجربة: الإشعارات شغّالة ✓")
+    return web.json_response({"ok": True, "on": AUTO["notify"].get("on")})
+
+
 SCHED_FILE = DATA / "schedules.json"
 
 
@@ -997,6 +1237,10 @@ def on_telegram(t: Telegram) -> None:
     else:
         msg["bytes"] = list(p.value.value)
     broadcast(msg)
+    try:
+        auto_on_telegram(msg)
+    except Exception as err:  # noqa: BLE001
+        log.warning("rules: %s", err)
 
 
 async def _safe_tuya(dev_id: str, code: str, value) -> None:
@@ -1144,6 +1388,10 @@ def authed(req) -> bool:
 
 @web.middleware
 async def auth_mw(req, handler):
+    if req.path.startswith("/api/hook/") and hook_ok(req):
+        return await handler(req)
+    if req.path.startswith("/api/hook/"):
+        return web.json_response({"ok": False, "error": "bad token"}, status=401)
     if req.path in ("/login", "/ping") or req.path in PUBLIC_FILES or not is_remote(req) or authed(req) or (INSTALLER_PW and is_installer(req)):
         return await handler(req)
     if not REMOTE_PW:
@@ -1494,6 +1742,14 @@ async def main() -> None:
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
         web.post("/api/update", request_update),
+        web.get("/api/auto", get_auto),
+        web.put("/api/auto", put_auto),
+        web.post("/api/auto/test", test_notify),
+        web.get("/api/energy", get_energy),
+        web.get("/api/hook/geo", geo_hook),
+        web.post("/api/hook/geo", geo_hook),
+        web.get("/api/hook/scene", scene_hook),
+        web.post("/api/hook/scene", scene_hook),
         web.post("/api/scene", scene_run),
         web.put("/api/scenes", put_scenes),
         web.put("/api/owner", put_owner),

@@ -123,6 +123,7 @@ public class ControlActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true);
         // tells the page it runs inside TAT SMART: customer controls only, no technician login
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString() + " TATSMART");
+        web.addJavascriptInterface(new Js(), "TATApp");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         web.setWebViewClient(new WebViewClient() {
@@ -168,6 +169,50 @@ public class ControlActivity extends Activity {
         root.addView(gear, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START));
         setContentView(root);
         web.loadUrl(url);
+    }
+
+    /** What the house page may ask the app to do. */
+    private class Js {
+        @android.webkit.JavascriptInterface public void geo(String json) {
+            prefs.edit().putString("geo", json).remove("geo_last").apply();
+            runOnUiThread(ControlActivity.this::askLocation);
+        }
+        @android.webkit.JavascriptInterface public void geoOff() {
+            Geo.disable(ControlActivity.this);
+            runOnUiThread(() -> Toast.makeText(ControlActivity.this, "انطفى الوصول التلقائي", Toast.LENGTH_SHORT).show());
+        }
+        @android.webkit.JavascriptInterface public String geoState() {
+            return prefs.getString("geo", "").isEmpty() ? "off" : Geo.hasPermission(ControlActivity.this) ? "on" : "need_permission";
+        }
+    }
+
+    private void askLocation() {
+        if (!Geo.hasPermission(this)) {
+            requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION}, 51);
+            return;
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 29 && checkSelfPermission(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("إذن الموقع طول الوقت")
+                    .setMessage("حتى البيت يعرف من توصل حتى لو التطبيق مسدود، اختار بالشاشة الجاية: \"السماح طوال الوقت\".")
+                    .setPositiveButton("تمام", (d, w) -> requestPermissions(new String[]{android.Manifest.permission.ACCESS_BACKGROUND_LOCATION}, 52))
+                    .show();
+            return;
+        }
+        boolean ok = Geo.register(this);
+        Toast.makeText(this, ok ? "✓ الوصول التلقائي شغّال على هذا التلفون" : "ما تفعّل، تأكد من إذن الموقع", Toast.LENGTH_LONG).show();
+    }
+
+    @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(code, perms, res);
+        boolean granted = res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if (code == 51 && granted) askLocation();
+        else if (code == 52) {
+            boolean ok = Geo.register(this);
+            Toast.makeText(this, granted && ok ? "✓ الوصول التلقائي شغّال على هذا التلفون"
+                    : ok ? "شغّال بس لما التطبيق مفتوح. حتى يشتغل دايماً: الإعدادات ← التطبيقات ← TAT SMART ← الموقع ← السماح طوال الوقت"
+                    : "ما تفعّل: لازم إذن الموقع", Toast.LENGTH_LONG).show();
+        } else Toast.makeText(this, "ما تفعّل: لازم إذن الموقع", Toast.LENGTH_LONG).show();
     }
 
     private TextView text(String s, int size, String color) {

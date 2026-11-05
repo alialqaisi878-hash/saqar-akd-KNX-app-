@@ -301,7 +301,29 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .sol .alert{font-size:.82rem;padding:10px 12px;border-radius:12px;background:rgba(255,192,112,.08);border:1px solid rgba(255,192,112,.25);margin-top:12px}
 .sol .demo{color:var(--d-warm);font-size:.75rem;border:1px solid rgba(255,192,112,.3);border-radius:99px;padding:4px 10px}
 
+/* automations */
+.auto .acard{min-height:0;display:grid;gap:12px}
+.auto .agrid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}@media(max-width:760px){.auto .agrid{grid-template-columns:1fr}}
+.auto .amap{width:100%;height:220px;border:0;border-radius:12px;background:#060a12}.auto .amap.none{display:grid;place-items:center;color:var(--d-mut);font-size:.85rem}
+.auto .acol{display:grid;gap:10px;align-content:start}
+.auto .arow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.auto .arow input{flex:1;min-width:140px}
+.auto input,.auto select{background:#0b1322;border:1px solid var(--d-line);border-radius:10px;color:var(--d-ink);padding:8px 10px;font:inherit;font-size:.85rem;min-width:0}
+.auto input[type=range]{padding:0;width:100%}
+.auto .aphone{display:grid;gap:8px;padding-top:10px;border-top:1px solid var(--d-line)}
+.auto .al{font-size:.75rem;color:var(--d-mut)}
+.auto .arule{display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--d-line)}.auto .arule.off{opacity:.5}
+.auto .arule .tx{flex:1;min-width:0}.auto .arule small{display:block;color:var(--d-mut);font-size:.75rem;margin-top:2px}
+.auto .aadd{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.auto .aadd label{display:grid;gap:4px;font-size:.72rem;color:var(--d-mut)}
+.auto .aadd .chk{display:flex;align-items:center;gap:6px;padding-bottom:8px}
+.auto .alog{display:grid;gap:4px;font-size:.8rem}.auto .alog small{color:var(--d-mut)}
+.auto .dbtn.pri{background:var(--d-acc2);border-color:var(--d-acc2)}.auto .dbtn.del{color:#ff8a8a}
 /* maintenance */
+.bus .blist{display:grid;gap:2px;max-height:280px;overflow:auto;font-size:.8rem}
+.bus .brow{display:grid;grid-template-columns:64px 64px 64px 1fr auto;gap:8px;padding:4px 6px;border-radius:6px;align-items:center}.bus .brow:first-child{animation:mflash 1.2s}
+.bus .bt,.bus .bn{color:var(--d-mut)}.bus .bn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bus .bres{font-size:.85rem;padding:8px 10px;border-radius:10px;background:rgba(108,156,230,.08);margin-bottom:8px}.bus .bres.bad{background:rgba(255,138,138,.1)}.bus .bres.ok{color:#5fd18b}
+.bus,.mnt .mtop .mbar label.dbtn{cursor:pointer}
+
 .mnt .mlinks{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:12px}
 .mnt .ml{display:flex;gap:10px;align-items:flex-start;min-height:0;padding:12px 14px}.mnt .ml small{display:block;color:var(--d-mut);font-size:.75rem;margin-top:2px;overflow-wrap:anywhere}.mnt .ml a{color:var(--d-acc)}
 .mnt .dot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex:none}.mnt .dot.ok{background:#5fd18b;box-shadow:0 0 8px #5fd18b88}.mnt .dot.bad{background:#ff8a8a}
@@ -313,7 +335,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .mnt .mlist{padding:4px 14px;min-height:0}
 .mnt .mrow{display:grid;grid-template-columns:70px minmax(140px,1fr) 80px 110px 250px;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--d-line)}
 .mnt .mlist .mrow:first-child{border-top:0}
-.mnt .madd{grid-template-columns:90px 1fr 90px auto;padding:12px 14px;border-top:1px solid var(--d-line)}
+.mnt .madd{min-height:0;grid-template-columns:90px 1fr 90px auto;padding:12px 14px;border-top:1px solid var(--d-line)}
 .mnt .ma{color:var(--d-acc);font-size:.85rem}
 .mnt .md{text-align:center}
 .mnt .mv{display:grid;font-size:.85rem;border-radius:8px;padding:2px 6px}.mnt .mv small{color:var(--d-mut);font-size:.68rem}
@@ -627,6 +649,7 @@ function connect(){
   if(m.t==="cameras"){camList=null;if(dashOn&&dpage==="cams")renderDash();}
   if(m.t==="status"&&dashOn){if(dpage==="maint"&&role.installer)loadBInfo();else renderDash();}
   if(m.t==="tuya_err"&&role.installer)toast("تويا: "+m.msg);
+  if(m.t==="notify"){toast("🔔 "+m.title+": "+m.body);if(auto){auto.log=[{t:new Date().toLocaleString("en-GB").slice(0,17),title:m.title,body:m.body}].concat(auto.log||[]);if(dashOn&&dpage==="auto")renderDash();}}
   if(m.t==="error")toast(m.msg);
   if(m.t==="remote"&&location.protocol!=="https:"){const t=$("#connTag");if(t){let a=document.getElementById("remoteLink");if(!a){a=document.createElement("a");a.id="remoteLink";a.className="tag";a.target="_blank";a.style.marginInlineStart="6px";t.after(a);}a.href=m.url;a.textContent="🌐 رابط من برة البيت";a.title=m.url;}}
  };
@@ -919,6 +942,7 @@ const DI={
  sun:SV('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
  dinner:SV('<path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10"/><path d="M17 21V3c-2 0-3 3-3 7h3"/>'),
  door:SV('<path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><path d="M3 21h18"/><path d="M14 12h.01"/>'),
+ bolt:SV('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'),
  tool:SV('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7V21h3.3l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>'),
  gear:SV('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
  solar:SV('<path d="M3 20l2-9h14l2 9z"/><path d="M4 15.5h16M9.5 11l-1 9M14.5 11l1 9"/><circle cx="12" cy="5" r="2.2"/><path d="M12 1v.5M7.5 3l.4.4M16.5 3l-.4.4"/>'),
@@ -1131,6 +1155,21 @@ function solChart(){
  g+=`<line x1="${x(nowH)}" x2="${x(nowH)}" y1="${T}" y2="${y(0)}" stroke="#93a1b8" stroke-dasharray="3 4"/><circle cx="${x(nowH)}" cy="${y(pv[nowH])}" r="4" fill="#ffc070"/><circle cx="${x(nowH)}" cy="${y(ld[nowH])}" r="4" fill="#6c9ce6"/><text x="${x(nowH)-6}" y="${T+8}" style="fill:#eaf0f8">الآن</text>`;
  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="الإنتاج والاستهلاك خلال اليوم">${g}</svg>`;
 }
+let energyHist=null,energySpan=7;
+async function loadEnergy(){try{energyHist=(await (await fetch("api/energy")).json()).days||{};}catch(e){energyHist={};}if(dashOn&&dpage==="solar")renderDash();}
+function energyReport(){
+ if(!energyHist){loadEnergy();return `<div class="dempty">جاري التحميل…</div>`;}
+ const keys=Object.keys(energyHist).sort();
+ if(!keys.length)return `<div class="dempty">التقرير يبدي يتجمع من اليوم: كل يوم ينحفظ إنتاجه واستهلاكه.</div>`;
+ const days=keys.slice(-energySpan),W=380,H=150,bw=Math.min(26,(W-20)/days.length/2.4);
+ const mx=Math.max(1,...days.map(k=>Math.max(+energyHist[k].pv||0,+energyHist[k].load||0)));
+ const bars=days.map((k,i)=>{const d=energyHist[k],x=10+i*(W-20)/days.length,hp=(+d.pv||0)/mx*(H-30),hl=(+d.load||0)/mx*(H-30);
+  return `<rect x="${x}" y="${H-18-hp}" width="${bw}" height="${hp}" rx="3" fill="#ffc070"><title>${k} إنتاج ${(+d.pv||0).toFixed(1)}</title></rect><rect x="${x+bw+2}" y="${H-18-hl}" width="${bw}" height="${hl}" rx="3" fill="#6c9ce6"><title>${k} استهلاك ${(+d.load||0).toFixed(1)}</title></rect>${days.length<=10?`<text x="${x+bw}" y="${H-4}" font-size="9" fill="#93a1b8" text-anchor="middle">${k.slice(5)}</text>`:""}`;}).join("");
+ const sum=f=>days.reduce((a,k)=>a+(+energyHist[k][f]||0),0);
+ const self=sum("load")?Math.max(0,Math.min(100,100-sum("buy")/sum("load")*100)):0;
+ return `<div class="seg" role="group" style="margin-bottom:8px">${[[7,"أسبوع"],[30,"شهر"],[365,"سنة"]].map(([n,t])=>`<button class="${energySpan===n?"on":""}" data-espan="${n}">${t}</button>`).join("")}</div>
+ <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}</svg>
+ <div class="lg"><span><i style="background:#ffc070"></i>إنتاج ${sum("pv").toFixed(0)} kWh</span><span><i style="background:#6c9ce6"></i>استهلاك ${sum("load").toFixed(0)} kWh</span><span>من الوطنية ${sum("buy").toFixed(0)}</span><span>للوطنية ${sum("sell").toFixed(0)}</span><span>اكتفاء ذاتي <b>${self.toFixed(0)}%</b></span></div>`;}
 function dashSolar(){
  const live=solarLive&&solarLive.data&&solarLive.data.pv!=null,ld=live?solarLive.data:null;
  const s=live?solFromLive(ld):SOL[solMode],rules=Object.assign({},P().solarRules);
@@ -1165,7 +1204,7 @@ function dashSolar(){
   ${live?`<div class="tl"><div class="k">شحن البطارية اليوم</div><div class="v">${fx(td.charge)}<small>kWh</small></div></div>`:`<div class="tl"><div class="k">وفّرت هذا الشهر</div><div class="v">184,000<small>د.ع</small></div></div>`}
  </div>
  <div class="g2">
-  <section class="sc chart"><div class="sh"><b>اليوم ساعة بساعة</b><span>kW</span></div>${live?`<div class="dempty">الرسم ساعة بساعة من SolisCloud ينضاف بالنسخة الجاية.</div>`:solChart()}
+  <section class="sc chart"><div class="sh"><b>${live?"تقرير الطاقة":"اليوم ساعة بساعة"}</b><span>${live?"kWh":"kW"}</span></div>${live?energyReport():solChart()}
    ${live?"":`<div class="lg"><span><i style="background:#ffc070"></i>إنتاج الألواح</span><span><i style="background:#6c9ce6"></i>استهلاك البيت</span></div>`}</section>
   <section class="sc"><div class="sh"><b>أتمتة وية KNX</b><span>تشتغل لحالها</span></div>
    ${SOL_RULES.map(([k,ic,t,sub,def])=>`<div class="rule"><div class="ic">${ic}</div><div class="tx">${t}<small>${sub}</small></div>${(on=>`<button class="tgl${on?" on":""}" data-solr="${k}" aria-pressed="${on}" aria-label="تفعيل"><i></i></button>`)(k in rules?rules[k]:def)}</div>`).join("")}
@@ -1262,7 +1301,16 @@ function gaShow(dpt,m){const mn=gaMain(dpt);
  if(mn==="9"&&m.bytes.length>=2)return f16(m.bytes).toFixed(1);
  if(mn==="17"||mn==="18")return "سين "+((m.bytes[0]&63)+1);
  return m.bytes.map(hex).join(" ");}
-function mntNote(m){gaVal[m.ga]={m,t:new Date().toLocaleTimeString("en-GB")};
+const busLog=[];let busCheck=null;
+function busRow(x){const g=P().gas.find(y=>y.addr===x.ga);return `<div class="brow"><span class="ft bt">${x.t}</span><span class="ft">${esc(x.src||"")}</span><span class="ft ma">${esc(x.ga)}</span><span class="bn">${esc(g?g.name:"")}</span><b class="ft">${esc(x.v)}</b></div>`;}
+function busHtml(){
+ const chk=busCheck?(busCheck.done?(busCheck.miss.length?`<div class="bres bad">⚠ ${busCheck.miss.length} من ${busCheck.total} ما ردّت: ${busCheck.miss.map(a=>`<span class="ft">${esc(a)}</span> ${esc(gaName(a))}`).join("، ")}</div>`:`<div class="bres ok">✓ كل الأجهزة ردّت (${busCheck.total})</div>`):`<div class="bres">جاري الفحص… ${busCheck.total} عنوان</div>`):"";
+ return `<div class="dsec">📡 رادار الباص</div><div class="dcard bus"><div class="mbar"><button class="dbtn pri" data-bcheck>🔍 فحص الأجهزة الي ما ترد</button><button class="dbtn" data-bclear>مسح</button><span class="dmut">كل تلغرام يمشي على الباص يطلع هنا مباشرة</span></div>${chk}
+ <div id="busList" class="blist">${busLog.length?busLog.slice(0,60).map(busRow).join(""):`<div class="dmut">ما وصل شي بعد.</div>`}</div></div>`;}
+function mntNote(m){const g0=P().gas.find(x=>x.addr===m.ga);const rec={t:new Date().toLocaleTimeString("en-GB"),src:m.src,ga:m.ga,v:gaShow(g0&&g0.dpt,m)};busLog.unshift(rec);if(busLog.length>300)busLog.pop();
+ if(busCheck&&!busCheck.done)busCheck.seen.add(m.ga);
+ if(dashOn&&dpage==="maint"){const bl=document.getElementById("busList");if(bl){if(busLog.length===1)bl.innerHTML="";bl.insertAdjacentHTML("afterbegin",busRow(rec));while(bl.children.length>60)bl.lastChild.remove();}}
+ gaVal[m.ga]={m,t:rec.t};
  if(!(dashOn&&dpage==="maint"))return;const c=document.querySelector(`[data-gv="${m.ga}"]`);if(!c)return;
  const g=P().gas.find(x=>x.addr===m.ga);c.innerHTML=`<b>${esc(gaShow(g&&g.dpt,m))}</b><small>${gaVal[m.ga].t}</small>`;c.classList.remove("flash");void c.offsetWidth;c.classList.add("flash");}
 function mntCtl(g){const mn=gaMain(g.dpt),a=esc(g.addr);
@@ -1294,6 +1342,10 @@ function dashMaint(){
  ${mntLinks()}
  <div class="mbar"><input id="mntQ" data-keep placeholder="🔍 دوّر بالعنوان أو الاسم" value="${esc(f)}"><button class="dbtn" data-greadall>↻ قراءة الكل</button><button class="dbtn pri" data-gsave>💾 حفظ التعديلات</button></div>
  <div class="dcard mlist">${p.gas.length?p.gas.map(row).join(""):`<div class="dmut">ماكو عناوين. استورد ملف ETS من وضع التعديل (الخريطة) أو ضيف عنوان من جوه.</div>`}</div>
+${busHtml()}
+ <div class="dsec">🧩 قوالب البيوت</div>
+ <div class="dcard mtop"><div class="dmut">صدّر هذا البيت كقالب (العناوين والأجهزة والمشاهد والغرف، بدون صور ولا كلمات سر)، واستورده ببيت مشابه وعدّل العناوين بس.</div>
+  <div class="mbar" style="margin:0"><button class="dbtn" data-texp>⬇ تصدير قالب</button><label class="dbtn">⬆ استيراد قالب<input type="file" accept=".json,application/json" hidden data-timp></label></div></div>
  <div class="dsec">إضافة عنوان</div>
  <div class="dcard mrow madd"><input data-keep id="mnA" placeholder="1/2/3" class="ft"><input data-keep id="mnN" placeholder="الاسم"><input data-keep id="mnD" placeholder="1.001" class="ft md"><button class="dbtn pri" data-gadd>إضافة</button></div>
  </div>`;}
@@ -1307,6 +1359,12 @@ function mntClick(t){let b;const p=P();const q=s=>t.closest(s);const ga=a=>p.gas
  if(b=q("[data-gr]")){if(!live()){toast("الـ KNX غير متصل");return true;}ws.send(JSON.stringify({t:"read",gas:[b.dataset.gr]}));return true;}
  if(q("[data-greadall]")){if(!live()){toast("الـ KNX غير متصل");return true;}const gs=[...document.querySelectorAll("[data-mrow]:not([hidden])")].map(r=>r.dataset.mrow).slice(0,200);ws.send(JSON.stringify({t:"read",gas:gs}));toast("قراءة "+gs.length+" عنوان");return true;}
  if(q("[data-gupd]")){fetch("api/update",{method:"POST"}).then(r=>toast(r.ok?"انطلب التحديث: يطلع طلب التثبيت على تابلت البيت خلال دقيقة":"ما صار")).catch(()=>toast("ما صار"));return true;}
+ if(q("[data-bclear]")){busLog.length=0;renderDash();return true;}
+ if(q("[data-bcheck]")){if(!live()){toast("الـ KNX غير متصل");return true;}const gs=statusGas();if(!gs.length){toast("ماكو أجهزة بعناوين حالة");return true;}
+  busCheck={total:gs.length,seen:new Set(),done:false,miss:[]};ws.send(JSON.stringify({t:"read",gas:gs}));renderDash();
+  setTimeout(()=>{busCheck.done=true;busCheck.miss=gs.filter(a=>!busCheck.seen.has(a));if(dashOn&&dpage==="maint")renderDash();},Math.max(4000,gs.length*80+2500));return true;}
+ if(q("[data-texp]")){const p=P();const tpl={tat_template:1,name:p.name,gas:p.gas,devices:p.devices.map(d=>Object.assign({},d,{st:{}})),scenes:p.scenes||[],solarRules:p.solarRules||{},rooms:Object.fromEntries(Object.keys(p.rooms||{}).map(k=>[k,{}]))};
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(tpl,null,1)],{type:"application/json"}));a.download="TAT-template-"+(p.name||"house").replace(/[\\/:*?"<>|\s]/g,"-")+".json";document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),500);return true;}
  if(q("[data-gsave]")){mntSave();renderDash();return true;}
  if(b=q("[data-gdel]")){const a=b.dataset.gdel;const used=p.devices.some(d=>Object.values(d.ga||{}).includes(a));if(!confirm(used?`العنوان ${a} مربوط بجهاز. تحذفه؟`:`تحذف العنوان ${a}؟`))return true;mntSave(true);p.gas=p.gas.filter(x=>x.addr!==a);save();renderDash();return true;}
  if(q("[data-gadd]")){const a=$("#mnA").value.trim(),n=$("#mnN").value.trim(),d=$("#mnD").value.trim()||"1.001";
@@ -1315,7 +1373,98 @@ function mntClick(t){let b;const p=P();const q=s=>t.closest(s);const ga=a=>p.gas
   if(ga(a)){toast("العنوان موجود");return true;}
   mntSave(true);p.gas.push({addr:a,name:n||a,dpt:d});p.gas.sort((u,w)=>{const s=u.addr.split("/").map(Number),r=w.addr.split("/").map(Number);return s[0]-r[0]||s[1]-r[1]||s[2]-r[2];});save();mntFilter="";renderDash();toast("انضاف "+a);return true;}
  return false;}
-const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["scenes","المشاهد","scenes"],["ai","مصمم المشاهد","ai"],["map","الخريطة","map"],["maint","الصيانة","tool"],["settings","الإعدادات","gear"]];
+/* ---------- automations page (owner): arriving home, rules, notifications, Siri ---------- */
+let auto=null,autoLink="",autoMsg="";
+const AUTO_T={arrive:"من يوصل للبيت",leave:"من يطلع من البيت",solar_export:"الطاقة الفايضة أكثر من (kW)",battery_low:"البطارية تنزل تحت (%)",battery_full:"البطارية توصل فوك (%)",temp_above:"الحرارة تصير فوك (°)",temp_below:"الحرارة تنزل تحت (°)",ga_on:"جهاز أو حساس يشتغل",ga_off:"جهاز أو حساس يطفى"};
+async function loadAuto(){try{auto=await (await fetch("api/auto")).json();}catch(e){auto={rules:[],home:{},notify:{},people:[],log:[]};}
+ try{const b=await (await fetch("api/bridge")).json();autoLink=(b.link||"").replace(/\/?$/,"/");}catch(e){}
+ if(!autoLink)autoLink=location.origin+location.pathname.replace(/[^/]*$/,"");
+ if(dashOn&&dpage==="auto")renderDash();}
+async function saveAuto(extra){const r=await fetch("api/auto",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.assign({rules:auto.rules,home:auto.home,notify:auto.notify},extra||{}))}).catch(()=>null);
+ if(r&&r.ok){const j=await r.json();auto.token=j.token;toast("انحفظ");}else toast("ما انحفظ");renderDash();}
+function parseLoc(s){s=String(s||"");let m=s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)||s.match(/[?&](?:q|query|ll|destination)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i)||s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)||s.match(/(-?\d{1,2}\.\d{3,})\s*[, ]\s*(-?\d{1,3}\.\d{3,})/);
+ return m?{lat:+m[1],lng:+m[2]}:null;}
+function hookUrl(path,q){return autoLink+"api/hook/"+path+"?k="+encodeURIComponent(auto.token||"")+(q?"&"+q:"");}
+function copyBtn(txt,label){return `<button class="dbtn" data-copy="${esc(txt)}">${label||"📋 نسخ"}</button>`;}
+function ruleRow(r){const sc=(P().scenes||[]).find(s=>s.id===(r.then||{}).scene);
+ return `<div class="arule${r.on===false?" off":""}"><button class="tgl${r.on!==false?" on":""}" data-rtog="${esc(r.id)}"><i></i></button>
+ <div class="tx"><b>${esc(r.name||"")}</b><small>${esc(AUTO_T[r.when.type]||"")}${r.when.value!=null&&r.when.value!==""?" "+esc(r.when.value):""}${r.when.who?" · "+esc(r.when.who):""}${r.when.label?" · "+esc(r.when.label):""} ← ${sc?"مشهد "+esc(sc.name):"بدون مشهد"}${(r.then||{}).notify!==false?" + إشعار":""}</small></div>
+ <button class="dbtn del" data-rdel="${esc(r.id)}">✕</button></div>`;}
+function dashAuto(){
+ if(!auto){loadAuto();return `<div class="dcard">جاري التحميل…</div>`;}
+ const p=P(),h=auto.home||{},n=auto.notify||{};
+ const scenes=(p.scenes||[]);
+ const hv=p.devices.filter(d=>d.type==="hvac"&&d.ga&&d.ga.temp);
+ const bins=p.gas.filter(g=>String(g.dpt||"").startsWith("1."));
+ const map=h.lat?`<iframe class="amap" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${h.lng-0.006},${h.lat-0.004},${h.lng+0.006},${h.lat+0.004}&layer=mapnik&marker=${h.lat},${h.lng}"></iframe>`:`<div class="amap none">ما محدد موقع البيت بعد</div>`;
+ const app=window.TATApp&&TATApp.geo;
+ return `<div class="auto">
+ <div class="dsec">📍 الوصول للبيت</div>
+ <div class="dcard acard">
+  <div class="agrid"><div>${map}</div><div class="acol">
+   <div class="dmut">حدد مكان البيت مرة وحدة: من موقعك هسه وانت بالبيت، أو الصق رابط كوكل ماب.</div>
+   <button class="dbtn pri" data-ahere>📍 أني بالبيت هسه: خذ موقعي</button>
+   <div class="arow"><input id="aLoc" data-keep placeholder="رابط كوكل ماب أو 33.31, 44.36"><button class="dbtn" data-aloc>حفظ</button></div>
+   <label class="dmut">المسافة: <b id="aRadV">${h.radius||150}</b> متر<input type="range" id="aRad" min="50" max="1000" step="25" value="${h.radius||150}"></label>
+  </div></div>
+  ${h.lat?`<div class="aphone">
+   <b>شغّلها على التلفون</b>
+   ${app?`<div class="arow"><input id="aWho" data-keep placeholder="اسمك (مثلاً علي)" value="${esc(localStorage.getItem("tat-who")||"")}"><button class="dbtn pri" data-ageo>فعّل على هذا التلفون</button></div><div class="dmut">${(()=>{try{const st=TATApp.geoState();return st==="on"?"✓ شغّال على هذا التلفون <button class=\"dbtn del\" data-ageooff>إطفاء</button>":st==="need_permission"?"⚠ يحتاج إذن الموقع، دوس فعّل مرة ثانية":"التطبيق يطلب إذن الموقع: اختار \"السماح طوال الوقت\".";}catch(e){return "";}})()}</div>`:
+   `<div class="dmut"><b>آيفون:</b> افتح تطبيق Shortcuts ← Automation ← + ← Arrive (وصول) واختار موقع البيت ← أضف "Get Contents of URL" والصق رابط الوصول. سوي نفس الشي لـ Leave (مغادرة) برابط الطلعة. شغّل "Run Immediately".</div>
+   <div class="dmut"><b>أندرويد:</b> افتح الصفحة من تطبيق TAT SMART وراح يطلعلك زر التفعيل هنا.</div>
+   <div class="arow"><span class="ft al">رابط الوصول</span>${copyBtn(hookUrl("geo","e=arrive&who=iPhone"))}<span class="ft al">رابط الطلعة</span>${copyBtn(hookUrl("geo","e=leave&who=iPhone"))}</div>`}
+  </div>`:""}
+ </div>
+ <div class="dsec">⚡ الأتمتة</div>
+ <div class="dcard acard">${(auto.rules||[]).length?auto.rules.map(ruleRow).join(""):`<div class="dmut">ماكو أتمتة بعد. سوي وحدة من جوه، مثلاً: من أوصل للبيت شغّل مشهد استقبال.</div>`}
+  <div class="aadd">
+   <label>إذا<select id="rT" data-keep>${Object.entries(AUTO_T).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></label>
+   <label id="rVw" style="display:none">القيمة<input id="rV" data-keep type="number" step="any" placeholder="مثلاً 2"></label>
+   <label id="rDw" style="display:none">الجهاز<select id="rD" data-keep><option value="">—</option>${hv.map(d=>`<option value="${esc(d.ga.temp)}" data-k="t">${esc(d.name)} (حرارة)</option>`).join("")}${bins.map(g=>`<option value="${esc(g.addr)}" data-k="b">${esc(g.name)} · ${esc(g.addr)}</option>`).join("")}</select></label>
+   <label id="rWw">منو<input id="rW" data-keep placeholder="أي واحد" list="aPeople"><datalist id="aPeople">${(auto.people||[]).map(x=>`<option value="${esc(x)}">`).join("")}</datalist></label>
+   <label>سوي<select id="rS" data-keep><option value="">بس إشعار</option>${scenes.map(s=>`<option value="${esc(s.id)}">مشهد ${esc(s.name)}</option>`).join("")}</select></label>
+   <label class="chk"><input type="checkbox" id="rN" data-keep checked> إشعار</label>
+   <button class="dbtn pri" data-radd>+ إضافة</button>
+  </div></div>
+ <div class="dsec">🔔 الإشعارات على التلفون</div>
+ <div class="dcard acard">
+  <div class="arow"><button class="tgl${n.on?" on":""}" data-ntog><i></i></button><b>${n.on?"الإشعارات شغّالة":"الإشعارات طافية"}</b><button class="dbtn" data-ntest>إرسال تجربة</button></div>
+  <div class="dmut">نزّل تطبيق <b>ntfy</b> المجاني (آيفون وأندرويد)، وبيه دوس + واكتب هذا الاسم: <b class="ft">${esc(n.topic||"")}</b> ${copyBtn(n.topic||"")}. كل أفراد البيت يكدرون يشتركون.</div>
+  ${(auto.log||[]).length?`<div class="alog">${auto.log.slice(0,6).map(x=>`<div><small class="ft">${esc(x.t)}</small> <b>${esc(x.title)}</b> ${esc(x.body)}</div>`).join("")}</div>`:""}
+ </div>
+ <div class="dsec">🎙 Siri والأوامر الصوتية</div>
+ <div class="dcard acard"><div class="dmut">بالآيفون: Shortcuts ← + ← "Get Contents of URL" ← الصق رابط المشهد ← سمّي الاختصار باسم المشهد. بعدها كول "Hey Siri" واسم المشهد. نفس الرابط يشتغل كزر على الشاشة الرئيسية.</div>
+  ${scenes.length?scenes.map(s=>`<div class="arow"><span>${esc(s.name)}</span>${copyBtn(hookUrl("scene","id="+encodeURIComponent(s.id)),"📋 رابط المشهد")}</div>`).join(""):`<div class="dmut">سوي مشاهد أول.</div>`}
+  <div class="arow"><button class="dbtn del" data-anewtok>تغيير الرمز السري للروابط</button><span class="dmut">(الروابط القديمة تبطل)</span></div>
+ </div></div>`;}
+function autoClick(t){const q=s=>t.closest(s);let b;
+ if(b=q("[data-copy]")){const v=b.dataset.copy;(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast("انسخ ✓")).catch(()=>{prompt("انسخ:",v);});return true;}
+ if(q("[data-ahere]")){if(!navigator.geolocation){toast("المتصفح ما يدعم الموقع");return true;}toast("جاري تحديد الموقع…");
+  navigator.geolocation.getCurrentPosition(pos=>{auto.home={lat:+pos.coords.latitude.toFixed(6),lng:+pos.coords.longitude.toFixed(6),radius:(auto.home||{}).radius||150};saveAuto();},e=>toast("ما كدر ياخذ الموقع: "+(e.message||"")),{enableHighAccuracy:true,timeout:15000});return true;}
+ if(q("[data-aloc]")){const l=parseLoc($("#aLoc").value);if(!l){toast("ما فهمت الرابط. انسخ الرابط من كوكل ماب (مشاركة ← نسخ) أو اكتب الإحداثيات");return true;}auto.home={lat:l.lat,lng:l.lng,radius:(auto.home||{}).radius||150};saveAuto();return true;}
+ if(q("[data-ageo]")){const who=($("#aWho").value||"").trim()||"أبو البيت";try{localStorage.setItem("tat-who",who);}catch(e){}
+  const h=auto.home;TATApp.geo(JSON.stringify({lat:h.lat,lng:h.lng,radius:h.radius||150,arrive:hookUrl("geo","e=arrive&who="+encodeURIComponent(who)),leave:hookUrl("geo","e=leave&who="+encodeURIComponent(who))}));toast("انطلب التفعيل، وافق على إذن الموقع");setTimeout(renderDash,4000);return true;}
+ if(q("[data-ageooff]")){try{TATApp.geoOff();}catch(e){}setTimeout(renderDash,300);return true;}
+ if(b=q("[data-rtog]")){const r=auto.rules.find(x=>x.id===b.dataset.rtog);r.on=r.on===false;saveAuto();return true;}
+ if(b=q("[data-rdel]")){auto.rules=auto.rules.filter(x=>x.id!==b.dataset.rdel);saveAuto();return true;}
+ if(q("[data-radd]")){const ty=$("#rT").value,v=$("#rV").value,ds=$("#rD"),sc=$("#rS").value,who=$("#rW").value.trim();
+  const needV=["solar_export","battery_low","battery_full","temp_above","temp_below"].includes(ty),needD=["temp_above","temp_below","ga_on","ga_off"].includes(ty);
+  if(needV&&(v===""||isNaN(+v))){toast("اكتب القيمة");return true;}
+  if(needD&&!ds.value){toast("اختار الجهاز");return true;}
+  const scn=(P().scenes||[]).find(s=>s.id===sc);const lbl=needD?ds.options[ds.selectedIndex].text:"";
+  const w={type:ty};if(needV)w.value=+v;if(needD){w.ga=ds.value;w.label=lbl;}if(ty==="arrive"||ty==="leave")w.who=who;
+  auto.rules.push({id:uid(),on:true,name:AUTO_T[ty].replace(/ \(.*\)/,"").replace(/^من /,"")+(needV?" "+v:"")+(who?" ("+who+")":""),when:w,then:{scene:sc,notify:$("#rN").checked},cooldown:10});saveAuto();return true;}
+ if(q("[data-ntog]")){auto.notify.on=!auto.notify.on;saveAuto();return true;}
+ if(q("[data-ntest]")){fetch("api/auto/test",{method:"POST"}).then(r=>r.json()).then(j=>toast(j.on?"انرسل، شوف التلفون":"شغّل الإشعارات أول")).catch(()=>toast("ما صار"));return true;}
+ if(q("[data-anewtok]")){if(confirm("تغيّر الرمز؟ لازم تحدّث روابط Siri والآيفون بعدها")){saveAuto({new_token:true});}return true;}
+ return false;}
+function autoInput(t){if(t.id==="aRad"){const s=$("#aRadV");if(s)s.textContent=t.value;return true;}return false;}
+function autoChange(t){if(t.id==="aRad"){auto.home.radius=+t.value;saveAuto();return true;}
+ if(t.id==="rT"){const ty=t.value;const sh=(id,on)=>{const e=$(id);if(e)e.style.display=on?"":"none";};
+  sh("#rVw",["solar_export","battery_low","battery_full","temp_above","temp_below"].includes(ty));sh("#rDw",["temp_above","temp_below","ga_on","ga_off"].includes(ty));sh("#rWw",ty==="arrive"||ty==="leave");
+  const ds=$("#rD");if(ds)[...ds.options].forEach(o=>{if(!o.dataset.k)return;o.hidden=ty.startsWith("temp")?o.dataset.k!=="t":o.dataset.k!=="b";});return true;}
+ return false;}
+const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["scenes","المشاهد","scenes"],["ai","مصمم المشاهد","ai"],["auto","الأتمتة","bolt"],["map","الخريطة","map"],["maint","الصيانة","tool"],["settings","الإعدادات","gear"]];
 function renderDash(){
  const el=$("#dash");if(!el)return;el.hidden=!dashOn;$("#dashBack").hidden=dashOn;if(!dashOn)return;
  const a=document.activeElement;if(a&&el.contains(a)&&(a.type==="range"||a.tagName==="TEXTAREA")&&dpage!=="ai")return;
@@ -1323,9 +1472,9 @@ function renderDash(){
  if(lastDpage==="maint"&&role.installer&&document.querySelector("[data-gn]"))mntCapture();
  const draft=$("#chatIn")?$("#chatIn").value:"";
  const p=P(),now=new Date();const hr=now.getHours();const greet=hr<12?"صباح الخير":hr<18?"أهلاً":"مساء الخير";
- const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",scenes:"المشاهد",ai:"مصمم المشاهد",maint:"الصيانة"};
+ const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",scenes:"المشاهد",ai:"مصمم المشاهد",auto:"الأتمتة",maint:"الصيانة"};
  const body={home:dashHome,rooms:dashRooms,room:dashRoom,light:()=>grouped(p.devices.filter(isLight))+(p.devices.some(isPlug)?`<div class="dsec">مفاتيح وقواطع ذكية</div>`+tilesHtml(p.devices.filter(isPlug)):""),
-  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,cams:dashCams,scenes:dashScenes,ai:dashChat,maint:dashMaint,settings:dashSettings}[dpage]||dashHome;
+  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,cams:dashCams,scenes:dashScenes,ai:dashChat,auto:dashAuto,maint:dashMaint,settings:dashSettings}[dpage]||dashHome;
  const lightsOn=p.devices.filter(d=>isLight(d)&&d.st.on).length;
  const br=p.brand||{};
  el.innerHTML=`<nav class="dside"><div class="dbrand">${br.logo?`<img src="${br.logo}" alt="" style="height:34px;max-width:60px;object-fit:contain">`:DI.home}<span>${esc(br.name||p.name||"البيت")}</span></div>
@@ -1349,8 +1498,10 @@ function dashClick(e){
  if(b=q("[data-blstop]")){const d=P().devices.find(x=>x.id===b.dataset.blstop);telegram((d.ga||{}).stop,"1.017",1);return;}
  if(b=q("[data-adv]")){const d=P().devices.find(x=>x.id===b.dataset.adv);operate(d);return;}
  if(dpage==="maint"&&mntClick(t))return;
+ if(dpage==="auto"&&autoClick(t))return;
+ if(b=q("[data-espan]")){energySpan=+b.dataset.espan;renderDash();return;}
  if(q("[data-noopen]")){return;}
- if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar")loadSolar();if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer)loadBInfo();renderDash();return;}
+ if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer)loadBInfo();if(k==="auto")loadAuto();renderDash();return;}
  if(b=q("#dLock")){$("#instBtn").click();return;}
  if(b=q("[data-go]")){dpage=b.dataset.go;renderDash();return;}
  if(b=q("[data-room]")){if(!b.dataset.room)return;droom=b.dataset.room;dpage="room";renderDash();return;}
@@ -1380,6 +1531,10 @@ function dashClick(e){
 }
 function dashChange(e){
  const t=e.target;
+ if(dpage==="auto"&&autoChange(t))return;
+ if(t.dataset.timp!=null&&t.files&&t.files[0]){t.files[0].text().then(txt=>{let j;try{j=JSON.parse(txt);}catch(e){toast("الملف مو قالب");return;}if(!j.tat_template||!Array.isArray(j.devices)){toast("الملف مو قالب TAT");return;}
+  const n=prompt("اسم البيت الجديد",(j.name||"بيت")+" (نسخة)");if(!n)return;const p={id:uid(),name:n,plan:null,planW:0,planH:0,gas:j.gas||[],devices:j.devices,scenes:j.scenes||[],solarRules:j.solarRules||{},rooms:j.rooms||{}};
+  db.projects.push(p);db.current=p.id;save();renderDash();render();toast("انستورد القالب، عدّل العناوين من الصيانة");});return;}
  if(t.dataset.cf==="brand"){readInteg();if(document.activeElement)document.activeElement.blur();renderDash();return;}
  if(t.dataset.saver){try{localStorage.setItem("knx-saver",t.checked?"1":"0");}catch(_){}toast("يتطبق بعد إعادة فتح الصفحة");return;}
  if(t.dataset.logo&&t.files[0]){const f=t.files[0];const url=URL.createObjectURL(f);const img=new Image();img.onload=()=>{const k=Math.min(1,300/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);const p=P();p.brand=Object.assign({},p.brand,{logo:c.toDataURL("image/png")});save();renderDash();toast("انرفع الشعار");};img.src=url;return;}
@@ -1387,7 +1542,7 @@ function dashChange(e){
  if(t.dataset.ps){const d=P().devices.find(x=>x.id===t.dataset.ps);devLevel(d,+t.value);refresh();t.blur();renderDash();}
  if(t.dataset.photo&&t.files[0]){photoFor(t.dataset.photo,t.files[0]);}
 }
-function dashInput(e){const t=e.target;if(t.id==="mntQ"){mntFilter=t.value.trim();document.querySelectorAll("[data-mrow]").forEach(r=>r.hidden=!!mntFilter&&!r.dataset.q.includes(mntFilter));return;}if(t.dataset.lv||t.dataset.ps){const s=t.parentElement.querySelector("span");if(s)s.textContent=t.value+"%";}}
+function dashInput(e){const t=e.target;if(dpage==="auto"&&autoInput(t))return;if(t.id==="mntQ"){mntFilter=t.value.trim();document.querySelectorAll("[data-mrow]").forEach(r=>r.hidden=!!mntFilter&&!r.dataset.q.includes(mntFilter));return;}if(t.dataset.lv||t.dataset.ps){const s=t.parentElement.querySelector("span");if(s)s.textContent=t.value+"%";}}
 
 /* ---------- schedules (run by the bridge, also when no page is open) ---------- */
 let schedules=null,holiday={enabled:false,devices:[]},sunT={};

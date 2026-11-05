@@ -9,8 +9,8 @@ android {
         applicationId = "iq.saqar.akdknx"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.3"
+        versionCode = 6
+        versionName = "2.4"
     }
     // fixed company key from the CI secret, so updates install over the old app (falls back to the debug key)
     signingConfigs {
