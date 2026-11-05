@@ -327,6 +327,27 @@ async def put_scenes(req):
     return web.json_response({"ok": False}, status=404)
 
 
+async def put_owner(req):
+    """The owner may rename, star and reorder devices, nothing else."""
+    data = await req.json()
+    db = load_db()
+    for pr in db.get("projects", []):
+        if pr.get("id") != data.get("project"):
+            continue
+        for d in pr.get("devices", []):
+            ch = (data.get("devices") or {}).get(d.get("id"))
+            if not isinstance(ch, dict):
+                continue
+            if isinstance(ch.get("name"), str) and ch["name"].strip():
+                d["name"] = ch["name"].strip()[:60]
+            d["fav"] = bool(ch.get("fav"))
+            if isinstance(ch.get("ord"), int):
+                d["ord"] = ch["ord"]
+        PROJECT_FILE.write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+        return web.json_response({"ok": True})
+    return web.json_response({"ok": False}, status=404)
+
+
 async def scene_run(req):
     sc = find_scene((await req.json()).get("id", ""))
     if sc is None:
@@ -1102,6 +1123,7 @@ async def main() -> None:
         web.post("/api/alloff", all_off),
         web.post("/api/scene", scene_run),
         web.put("/api/scenes", put_scenes),
+        web.put("/api/owner", put_owner),
         web.post("/api/assistant", assistant_chat),
         web.post("/api/installer", installer_login),
         web.post("/api/installer/logout", installer_logout),
