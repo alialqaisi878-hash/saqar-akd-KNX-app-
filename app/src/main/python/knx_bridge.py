@@ -368,11 +368,16 @@ class AssistantCtx:
                     out.append(f"{did}: مو موجود")
                     continue
                 act = a.get("action")
-                if act in ("on", "off"):
-                    await run_action(d, act == "on")
-                else:
-                    await run_value(d, act, a.get("value", 0))
-                out.append(f"{d.get('name')}: تم")
+                try:
+                    if act in ("on", "off"):
+                        await run_action(d, act == "on")
+                    else:
+                        await run_value(d, act, a.get("value", 0))
+                    out.append(f"{d.get('name')}: تم")
+                except Exception as err:  # noqa: BLE001
+                    out.append(f"{d.get('name')}: ما صار ({err})")
+            if out and all("ما صار" in x for x in out):
+                raise RuntimeError("، ".join(out))
             return out
         if name == "run_scene":
             sc = find_scene(a.get("scene_id", ""))
@@ -446,12 +451,18 @@ AI_KEY = str(CFG.get("assistant_api_key") or CFG.get("anthropic_api_key") or "")
 
 
 async def assistant_chat(req):
-    if assistant is None or not AI_KEY:
-        return web.json_response({"ok": False, "error": "المساعد مو مفعّل: اكتب مفتاح المساعد بإعدادات KNX Prog"})
+    if assistant is None:
+        return web.json_response({"ok": False, "error": "assistant.py missing"})
     data = await req.json()
     try:
-        res = await assistant.chat(AI_KEY, str(CFG.get("assistant_model") or "claude-sonnet-5-5"),
-                                   data.get("messages", []), AssistantCtx(), is_installer(req))
+        if not AI_KEY:
+            res = await assistant.local_chat(data.get("messages", []), AssistantCtx())
+        elif AI_KEY.startswith("AIza"):
+            res = await assistant.chat_gemini(AI_KEY, str(CFG.get("assistant_model") or "gemini-flash-latest"),
+                                              data.get("messages", []), AssistantCtx(), is_installer(req))
+        else:
+            res = await assistant.chat(AI_KEY, str(CFG.get("assistant_model") or "claude-sonnet-5-5"),
+                                       data.get("messages", []), AssistantCtx(), is_installer(req))
     except Exception as err:  # noqa: BLE001
         log.warning("assistant: %s", err)
         return web.json_response({"ok": False, "error": str(err)})
@@ -722,7 +733,7 @@ async def bridge_info(_req):
     return web.json_response({
         "knx": status, "relay": relay_state, "link": remote_url["url"],
         "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
-        "assistant": bool(AI_KEY),
+        "assistant": ("gemini" if AI_KEY.startswith("AIza") else "claude") if AI_KEY else "local",
     })
 
 

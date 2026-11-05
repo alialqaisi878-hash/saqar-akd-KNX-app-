@@ -121,3 +121,182 @@ async def chat(api_key: str, model: str, messages: list, ctx, installer: bool) -
                     results.append({"type": "tool_result", "tool_use_id": u["id"], "is_error": True, "content": str(err)})
             msgs.append({"role": "user", "content": results})
     return {"reply": "سويت الي كدرت عليه، بس الطلب طويل. جرب تقسمه.", "done": done, "changed": changed}
+
+
+# ---------------------------------------------------------------- Google Gemini (free key from aistudio.google.com)
+GEMINI_URL = os.environ.get("GEMINI_API_URL") or "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+
+def _gem_schema(s):
+    """Gemini takes an OpenAPI subset: drop keys it does not know."""
+    if isinstance(s, dict):
+        out = {}
+        for k, v in s.items():
+            if k in ("additionalProperties",):
+                continue
+            out[k] = _gem_schema(v)
+        if out.get("type") == "object" and not out.get("properties"):
+            out.pop("properties", None)
+            out.pop("required", None)
+        return out
+    if isinstance(s, list):
+        return [_gem_schema(x) for x in s]
+    return s
+
+
+async def chat_gemini(api_key: str, model: str, messages: list, ctx, installer: bool) -> dict:
+    tools = TOOLS_ALL + (TOOLS_INSTALLER if installer else [])
+    decls = []
+    for t in tools:
+        d = {"name": t["name"], "description": t["description"]}
+        sch = _gem_schema(t["input_schema"])
+        if sch.get("properties"):
+            d["parameters"] = sch
+        decls.append(d)
+    system = SYSTEM.format(
+        inst=" والأجهزة نفسها" if installer else "",
+        role_note="المستخدم هو الفني، يكدر يضيف ويعدّل الأجهزة." if installer else
+        "المستخدم صاحب البيت: ما يكدر يضيف أو يحذف أجهزة KNX، إذا طلب هذا كله يتواصل ويا الفني.")
+    contents = [{"role": "user" if m["role"] == "user" else "model", "parts": [{"text": m["content"]}]}
+                for m in messages[-20:] if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str) and m["content"].strip()]
+    done: list[str] = []
+    changed = False
+    models = [m for m in dict.fromkeys([model, "gemini-flash-latest", "gemini-2.5-flash"]) if m]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as s:
+        for _ in range(10):
+            body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
+                    "tools": [{"functionDeclarations": decls}], "generationConfig": {"temperature": 0.3}}
+            res, status = None, 0
+            for mdl in list(models):
+                async with s.post(GEMINI_URL.format(model=mdl), params={"key": api_key}, json=body) as r:
+                    status, res = r.status, await r.json(content_type=None)
+                if status == 404:
+                    models.remove(mdl)  # model name not available any more: try the next one
+                    continue
+                break
+            if status != 200:
+                err = (res or {}).get("error", {}).get("message", str(res)) if isinstance(res, dict) else str(res)
+                if status == 429:
+                    err = "خلص الحد المجاني لهذي الدقيقة/اليوم، جرب بعد شوية"
+                raise RuntimeError(f"{status}: {err}")
+            cand = (res.get("candidates") or [{}])[0]
+            parts = (cand.get("content") or {}).get("parts") or []
+            calls = [p["functionCall"] for p in parts if "functionCall" in p]
+            if not calls:
+                text = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
+                return {"reply": text or "تم.", "done": done, "changed": changed}
+            contents.append({"role": "model", "parts": parts})
+            answers = []
+            for c in calls:
+                try:
+                    out = await ctx.call(c["name"], c.get("args") or {}, installer)
+                    if c["name"] != "get_house":
+                        changed = True
+                        done.append(c["name"])
+                    answers.append({"functionResponse": {"name": c["name"], "response": {"result": out}}})
+                except Exception as err:  # noqa: BLE001
+                    answers.append({"functionResponse": {"name": c["name"], "response": {"error": str(err)}}})
+            contents.append({"role": "user", "parts": answers})
+    return {"reply": "سويت الي كدرت عليه، بس الطلب طويل. جرب تقسمه.", "done": done, "changed": changed}
+
+
+# ---------------------------------------------------------------- no key: simple Arabic commands, works offline
+import re as _re
+
+_AR = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ة": "ه", "ى": "ي", "ؤ": "و", "ئ": "ي", "ـ": "",
+                     "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4", "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9"})
+
+
+def _norm(t: str) -> str:
+    t = _re.sub(r"[ً-ْ]", "", (t or "").translate(_AR)).lower()
+    return _re.sub(r"\s+", " ", t).strip()
+
+
+def _stem(w: str) -> str:
+    w = _norm(w)
+    return w[2:] if w.startswith("ال") and len(w) > 3 else w
+
+
+OFF_W = ("طفي", "اطفي", "طفيه", "سكر", "بند", "اقفل", "انطفي", "طفي")
+ON_W = ("شغل", "شعل", "ولع", "شغلي", "افتح", "شغله", "نور")
+
+
+async def local_chat(messages: list, ctx) -> dict:
+    text = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+    t = _norm(text)
+    house = await ctx.call("get_house", {}, False)
+    devs, scenes = house["devices"], house["scenes"]
+    words = [_stem(w) for w in t.split()]
+
+    if any(k in t for k in ("شنو الشغال", "شنو شغال", "الشغال", "شكو شغال")):
+        on = [d["name"] for d in devs if d.get("on") and d["type"] not in ("scene", "blind")]
+        return {"reply": ("الشغّال هسة: " + "، ".join(on)) if on else "كلشي طافي هسة.", "done": [], "changed": False}
+
+    for sc in scenes:
+        n = _norm(sc["name"])
+        if n and n in t:
+            await ctx.call("run_scene", {"scene_id": sc["id"]}, False)
+            return {"reply": f"شغّلت مشهد {sc['name']} ✓", "done": ["run_scene"], "changed": True}
+
+    off = any(w in t for w in OFF_W)
+    on = any(w in t for w in ON_W) and not off
+    num = _re.search(r"(\d{1,3})\s*(%|٪|بالميه|درجه|°)?", t)
+    if not on and not off and not num and any(k in t for k in ("موعد", "كل يوم", "ساعه", "مشهد", "سويلي", "ضيف", "اضف", "برمج", "غروب", "شروق")):
+        return {"reply": "البرمجة بالكلام (مواعيد، مشاهد، أجهزة) تحتاج المفتاح المجاني من Google AI Studio بإعدادات KNX Prog. التشغيل والإطفاء والمشاهد يشتغلن بدونه.",
+                "done": [], "changed": False}
+    generic = {"ضو", "ضوء", "ضوه", "اناره", "سبوت", "جهاز", "غرفه", "على", "علي"}
+    room_names = {d.get("room") for d in devs if d.get("room")}
+    room_hit = []
+    for r in room_names:
+        if _norm(r) in t or all(_stem(x) in words for x in r.split()):
+            room_hit += [d for d in devs if d.get("room") == r]
+    scores = {}
+    for d in devs:
+        n = _norm(d["name"])
+        if n and n in t:
+            scores[d["id"]] = 99
+            continue
+        ws_ = [_stem(x) for x in n.split() if _stem(x) not in generic and len(_stem(x)) > 1]
+        sc = sum(1 for x in ws_ if x in words)
+        if sc:
+            scores[d["id"]] = sc
+    best = max(scores.values(), default=0)
+    named = best >= 2 or (best == 1 and not room_hit)
+    if named:
+        target = [d for d in devs if scores.get(d["id"]) == best]
+    else:
+        target = room_hit
+    every = any(k in t.split() for k in ("كل", "كلشي", "البيت", "الكل")) or "كل البيت" in t
+    if not target and every:
+        target = list(devs)
+    if not named:
+        if any(k in t for k in ("ضو", "اناره", "ضوء", "اضويه", "لايت")):
+            target = [d for d in target if d["type"] in ("switch", "dimmer", "tuya")]
+        if any(k in t for k in ("مكيف", "تكييف", "تبريد", "سبلت")):
+            target = [d for d in (target or devs) if d["type"] == "hvac"]
+        if any(k in t for k in ("ستاره", "ستاير", "ستائر", "برده")):
+            target = [d for d in (target or devs) if d["type"] == "blind"]
+    target = [d for d in {d["id"]: d for d in target}.values() if d["type"] != "scene"]
+
+    if not target:
+        hint = "ما فهمت أي جهاز تقصد. اكتب اسم الجهاز أو الغرفة، مثلاً: \"طفي إنارة الصالة\" أو \"شغّل سينما\"."
+        return {"reply": hint, "done": [], "changed": False}
+    ids = [d["id"] for d in target]
+    names = "، ".join(d["name"] for d in target[:8]) + ("…" if len(target) > 8 else "")
+    if num and not off:
+        v = float(num.group(1))
+        if all(d["type"] == "hvac" for d in target):
+            await ctx.call("control", {"device_ids": ids, "action": "on"}, False)
+            await ctx.call("control", {"device_ids": ids, "action": "setpoint", "value": v}, False)
+            return {"reply": f"ظبطت {names} على {v:g}° ✓", "done": ["control"], "changed": True}
+        if all(d["type"] == "blind" for d in target):
+            await ctx.call("control", {"device_ids": ids, "action": "position", "value": v}, False)
+            return {"reply": f"ظبطت {names} على {v:g}% ✓", "done": ["control"], "changed": True}
+        await ctx.call("control", {"device_ids": ids, "action": "level", "value": v}, False)
+        return {"reply": f"ظبطت {names} على {v:g}% ✓", "done": ["control"], "changed": True}
+    if not on and not off:
+        return {"reply": f"تريد أشغّل لو أطفي {names}؟", "done": [], "changed": False}
+    res = await ctx.call("control", {"device_ids": ids, "action": "on" if on else "off"}, False)
+    bad = [x for x in res if "ما صار" in x]
+    note = ("\nما وصل لـ: " + "، ".join(x.split(":")[0] for x in bad[:6])) if bad else ""
+    return {"reply": f"{'شغّلت' if on else 'طفيت'} {names} ✓{note}", "done": ["control"], "changed": True}

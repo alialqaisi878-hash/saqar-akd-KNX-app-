@@ -60,7 +60,7 @@ public class SettingsActivity extends Activity {
         TextView ah = text("مساعد البيت الذكي (اختياري)", 19);
         ah.setPadding(0, 40, 0, 4);
         l.addView(ah);
-        l.addView(text("مفتاح API من console.anthropic.com ← API Keys. يبدي بـ sk-ant-", 13));
+        l.addView(text("بدون مفتاح: يفهم أوامر التشغيل والإطفاء والمشاهد. للبرمجة بالكلام: مفتاح مجاني من aistudio.google.com ← Get API key (يبدي بـ AIza).", 13));
         aiKey = field(l, "مفتاح المساعد", c.optString("assistant_api_key"), true);
 
         link = text("", 15);
