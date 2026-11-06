@@ -1497,7 +1497,7 @@ function mntLinks(){const b=bInfo;if(!b)return `<div class="mlinks dmut">جار�
  return `<div class="mlinks">
  ${it(k.state==="connected","شبكة KNX (IP Router)",(b.gateway?esc(b.gateway)+" · ":"")+(k.state==="connected"?"متصل":"غير متصل"))}
  ${it(r.state==="connected","سيرفر TAT (الوصول من برة البيت)",r.state==="connected"?(b.link?`<a href="${esc(b.link)}" target="_blank" class="ft">${esc(b.link.replace(/^https?:\/\//,""))}</a>`:"متصل"):r.state==="connecting"?"جاري الاتصال…":"غير متصل")}
- ${it(true,"KNX Prog "+esc(b.app||""),`<span style="display:block">${b.web_ver!=null?"نسخة الواجهة "+b.web_ver+(b.ota&&b.ota.new?" · نازل تحديث "+b.ota.new+" (ينطبق بالليل أو هسه بالزر)":b.ota&&b.ota.state==="needs_app"?" · التحديث الجاي يحتاج APK جديد":b.ota&&String(b.ota.state).startsWith("error")?" · ما كدر يفحص التحديث (نت؟)":" · محدّث"):""}</span><button class="dbtn" data-gupd style="margin-top:6px">⬇ تحديث للنسخة الأحدث</button>`)}
+ ${it(true,"KNX Prog "+esc(b.app||""),`<span style="display:block">${b.web_ver!=null?"نسخة الواجهة "+b.web_ver+(b.ota&&b.ota.new?" · نازل تحديث "+b.ota.new+" (ينطبق بالليل أو هسه بالزر)":b.ota&&b.ota.state==="needs_app"?" · التحديث الجاي يحتاج APK جديد":b.ota&&b.ota.state==="held"?" · اكو نسخة أحدث تنتظر نشر الشركة (زر التحديث يجربها هنا)":b.ota&&String(b.ota.state).startsWith("error")?" · ما كدر يفحص التحديث (نت؟)":" · محدّث"):""}</span><button class="dbtn" data-gupd style="margin-top:6px">⬇ تحديث للنسخة الأحدث</button>`)}
  ${it(e.ready,"برمجة ETS عن بعد",e.sessions?`ETS متصل هسه (${e.sessions})`:e.ready?"جاهز: افتح SaqarETS على الحاسبة واكتب رابط البيت وكلمة سر الفني":"يحتاج IP الراوتر وكلمة سر الفني بإعدادات KNX Prog")}
  </div>`;}
 function dashMaint(){

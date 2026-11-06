@@ -59,13 +59,16 @@ def load_seen() -> dict:
         return {}
 
 
-def mark_seen(house: str, online: bool) -> None:
+def mark_seen(house: str, online: bool, info: dict | None = None) -> None:
     s = load_seen()
     e = s.setdefault(house, {})
     now = int(time.time())
     e["last"] = now
     if online:
         e["since"] = now
+    for k, v in (info or {}).items():
+        if v:
+            e[k] = v
     SEEN_FILE.write_text(json.dumps(s), encoding="utf-8")
 
 
@@ -104,7 +107,8 @@ async def agent_handler(req: web.Request):
         await old.ws.close()
     agent = Agent(ws)
     agents[house] = agent
-    mark_seen(house, True)
+    info = {"v": req.query.get("v", "")[:12], "app": req.query.get("app", "")[:12], "name": req.query.get("name", "")[:60]}
+    mark_seen(house, True, info)
     log.info("house %s online", house)
     try:
         async for msg in ws:
@@ -249,6 +253,7 @@ ADMIN_LOGIN = """<form method="post"><h1>TAT · لوحة الشركة</h1><div c
 
 ADMIN_PAGE = """<main><h1>بيوت الزبائن</h1><div class="mut">كل بيت بيه KNX Prog مربوط بالسيرفر. يتحدث كل 10 ثواني.</div>
 <div class="stats"><div class="st"><b id="n">–</b><span class="mut">كل البيوت</span></div><div class="st"><b id="on" style="color:#5fd18b">–</b><span class="mut">متصل هسه</span></div><div class="st"><b id="off" style="color:#ff8a8a">–</b><span class="mut">غير متصل</span></div></div>
+<div class="st" style="margin-bottom:14px"><b style="font-size:1rem">إشعار لكل الزبائن</b><input id="nt" placeholder="العنوان" style="margin:8px 0"><input id="nm" placeholder="الرسالة" style="max-width:none"><button id="ns" style="margin-top:8px;padding:8px 18px">دز</button> <span id="nr" class="mut"></span></div>
 <input id="q" placeholder="دوّر على بيت"><table><thead><tr><th>البيت</th><th>الحالة</th><th>آخر مرة</th><th></th></tr></thead><tbody id="t"></tbody></table>
 <script>
 const ago=s=>{if(!s)return"—";const d=Math.round(Date.now()/1000-s);return d<90?"هسه":d<5400?Math.round(d/60)+" دقيقة":d<172800?Math.round(d/3600)+" ساعة":Math.round(d/86400)+" يوم";};
@@ -256,13 +261,84 @@ let rows=[];
 async function load(){const r=await fetch("api/houses");if(r.status==401){location.reload();return;}rows=(await r.json()).houses;draw();}
 function draw(){const q=document.getElementById("q").value.trim().toLowerCase();
  document.getElementById("n").textContent=rows.length;document.getElementById("on").textContent=rows.filter(h=>h.online).length;document.getElementById("off").textContent=rows.filter(h=>!h.online).length;
- document.getElementById("t").innerHTML=rows.filter(h=>!q||h.house.includes(q)).map(h=>`<tr><td class="ft">${h.house}</td><td><span class="dot ${h.online?"on":"off"}"></span>${h.online?"متصل من "+ago(h.since):"غير متصل"}</td><td>${h.online?"—":ago(h.last)}</td><td><a href="${h.link}" target="_blank">فتح ↗</a></td></tr>`).join("");}
-document.getElementById("q").oninput=draw;load();setInterval(load,10000);
+ document.getElementById("t").innerHTML=rows.filter(h=>!q||h.house.includes(q)).map(h=>`<tr><td class="ft">${h.house}${h.v?` <span class="mut">v${h.v}</span>`:""}</td><td><span class="dot ${h.online?"on":"off"}"></span>${h.online?"متصل من "+ago(h.since):"غير متصل"}</td><td>${h.online?"—":ago(h.last)}</td><td><a href="${h.link}" target="_blank">فتح ↗</a></td></tr>`).join("");}
+document.getElementById("q").oninput=draw;
+document.getElementById("ns").onclick=async()=>{const m=document.getElementById("nm").value.trim();if(!m)return;const r=await (await fetch("api/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({houses:"all",title:document.getElementById("nt").value,message:m})})).json();document.getElementById("nr").textContent=r.ok?"وصل لـ "+r.sent.length+" بيت، غير متصل "+r.offline.length:"ما وصل";};load();setInterval(load,10000);
 </script></main>"""
 
 
 def admin_ok(req) -> bool:
-    return secrets.compare_digest(req.cookies.get("tatadmin", ""), ADMIN_TOKEN)
+    """Browser cookie after login, or the TAT Admin program on the company PC (X-Admin: password)."""
+    if secrets.compare_digest(req.cookies.get("tatadmin", ""), ADMIN_TOKEN):
+        return True
+    pw = req.headers.get("X-Admin", "")
+    return bool(pw) and secrets.compare_digest(pw.encode(), admin_password().encode())
+
+
+# ---------------------------------------------------------------- releases and company messages
+RELEASE_FILE = DATA / "release.json"    # what the company published: {"web": n, "knxprog": code, "tatsmart": code}
+NOTIFY_FILE = DATA / "notify_log.json"
+
+
+def load_json(p: Path, default):
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return default
+
+
+async def release_get(_req):
+    """Public: apps only update up to the versions the company released. 404 = no gate yet."""
+    rel = load_json(RELEASE_FILE, None)
+    if not rel:
+        return web.json_response({"error": "no release yet"}, status=404)
+    return web.json_response(rel, headers={"Cache-Control": "no-store"})
+
+
+async def admin_release(req: web.Request):
+    if not admin_ok(req):
+        return web.json_response({"error": "login"}, status=401)
+    if req.method == "GET":
+        return web.json_response(load_json(RELEASE_FILE, {}))
+    d = await req.json()
+    rel = load_json(RELEASE_FILE, {})
+    for k in ("web", "knxprog", "tatsmart"):
+        if k in d:
+            rel[k] = max(0, int(d[k]))
+    rel["t"] = int(time.time())
+    rel["note"] = str(d.get("note", ""))[:300]
+    RELEASE_FILE.write_text(json.dumps(rel), encoding="utf-8")
+    log.info("release published %s", rel)
+    return web.json_response({"ok": True, "release": rel})
+
+
+async def admin_notify(req: web.Request):
+    """Company message to the customers' phones: each house tablet pushes it to its own private topic."""
+    if not admin_ok(req):
+        return web.json_response({"error": "login"}, status=401)
+    if req.method == "GET":
+        return web.json_response({"log": load_json(NOTIFY_FILE, [])})
+    d = await req.json()
+    title, msg = str(d.get("title", "")).strip()[:120], str(d.get("message", "")).strip()[:1000]
+    if not msg:
+        return web.json_response({"ok": False, "error": "empty message"}, status=400)
+    want = d.get("houses", "all")
+    targets = sorted(load_houses()) if want == "all" else [str(h).lower() for h in want]
+    sent, offline = [], []
+    for h in targets:
+        a = agents.get(h)
+        if not a:
+            offline.append(h)
+            continue
+        try:
+            await a.ws.send_str(json.dumps({"op": "notify", "title": title or "TAT SMART", "message": msg}))
+            sent.append(h)
+        except Exception:  # noqa: BLE001
+            offline.append(h)
+    lg = load_json(NOTIFY_FILE, [])
+    lg.insert(0, {"t": int(time.time()), "title": title, "message": msg, "sent": sent, "offline": offline})
+    NOTIFY_FILE.write_text(json.dumps(lg[:200], ensure_ascii=False), encoding="utf-8")
+    return web.json_response({"ok": True, "sent": sent, "offline": offline})
 
 
 async def admin_page(req: web.Request):
@@ -291,7 +367,8 @@ async def admin_houses(req: web.Request):
     out = []
     for h in sorted(load_houses()):
         e = seen.get(h, {})
-        out.append({"house": h, "online": h in agents, "since": e.get("since"), "last": e.get("last"), "link": f"{base}/h/{h}/"})
+        out.append({"house": h, "online": h in agents, "since": e.get("since"), "last": e.get("last"), "link": f"{base}/h/{h}/",
+                    "v": e.get("v", ""), "app": e.get("app", ""), "name": e.get("name", "")})
     out.sort(key=lambda x: (not x["online"], x["house"]))
     return web.json_response({"houses": out})
 
@@ -311,6 +388,9 @@ def main() -> None:
         web.route("*", PREFIX + "/admin", admin_page),
         web.route("*", PREFIX + "/admin/", admin_page),
         web.get(PREFIX + "/admin/api/houses", admin_houses),
+        web.route("*", PREFIX + "/admin/api/release", admin_release),
+        web.route("*", PREFIX + "/admin/api/notify", admin_notify),
+        web.get(PREFIX + "/release.json", release_get),
     ])
     if PREFIX:  # company-domain links without /knx
         app.add_routes([
@@ -320,6 +400,9 @@ def main() -> None:
             web.route("*", "/admin", admin_page),
             web.route("*", "/admin/", admin_page),
             web.get("/admin/api/houses", admin_houses),
+            web.route("*", "/admin/api/release", admin_release),
+            web.route("*", "/admin/api/notify", admin_notify),
+            web.get("/release.json", release_get),
         ])
     admin_password()
     log.info("KNX relay listening on port %d", PORT)

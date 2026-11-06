@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [main]
-    paths-ignore: ["ets/**", "server/**", ".github/workflows/ets-exe.yml"]
+    paths-ignore: ["ets/**", "server/**", "admin/**", ".github/workflows/ets-exe.yml", ".github/workflows/admin-exe.yml"]
   workflow_dispatch:
 
 permissions:

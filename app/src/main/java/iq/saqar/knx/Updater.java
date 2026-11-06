@@ -24,6 +24,7 @@ import java.net.URL;
  */
 public class Updater extends BroadcastReceiver {
     private static final String BASE = "https://raw.githubusercontent.com/alialqaisi878-hash/saqar-akd-KNX-app-/apk/";
+    private static final String RELEASE = "https://knx.saqar-akd.com.iq/release.json";
     private static final String KEY = "knxprog";   // entry in version.json
     private static final String FILE = "KNXProg.apk"; // apk name on the apk branch
     private static final String CH = "update";
@@ -36,6 +37,25 @@ public class Updater extends BroadcastReceiver {
             PackageInfo pi = c.getPackageManager().getPackageInfo(c.getPackageName(), 0);
             return Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
         } catch (Exception e) { return 0; }
+    }
+
+    /** Version the company released in TAT Admin (server release.json); 0 = no gate yet, -1 = server not reachable. */
+    static int released() {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(RELEASE + "?t=" + System.currentTimeMillis()).openConnection();
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(8000);
+            if (c.getResponseCode() == 404) return 0;
+            StringBuilder sb = new StringBuilder();
+            try (InputStream in = c.getInputStream()) {
+                byte[] b = new byte[4096];
+                int n;
+                while ((n = in.read(b)) > 0) sb.append(new String(b, 0, n, "UTF-8"));
+            }
+            return new JSONObject(sb.toString()).optInt(KEY, 0);
+        } catch (Exception e) {
+            return -1;  // server not reachable: wait for the next check
+        }
     }
 
     /** Reads version.json; calls back on the same background thread. */
@@ -52,7 +72,10 @@ public class Updater extends BroadcastReceiver {
                     while ((n = in.read(b)) > 0) sb.append(new String(b, 0, n, "UTF-8"));
                 }
                 JSONObject o = new JSONObject(sb.toString()).getJSONObject(KEY);
-                r.done(o.optInt("code"), o.optString("name"), null);
+                int code = o.optInt("code");
+                int rel = released();
+                if (rel < 0 || (rel > 0 && code > rel)) code = 0;  // not released by the company yet (or server not reachable)
+                r.done(code, o.optString("name"), null);
             } catch (Exception e) {
                 r.done(0, "", String.valueOf(e.getMessage()));
             }

@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import shutil
+import urllib.error
 import urllib.request
 import logging
 import socket
@@ -779,13 +780,13 @@ def save_auto() -> None:
     AUTO_FILE.write_text(json.dumps(AUTO, ensure_ascii=False), encoding="utf-8")
 
 
-async def notify(title: str, body: str, tag: str = "house") -> None:
+async def notify(title: str, body: str, tag: str = "house", force: bool = False) -> None:
     """Push to the owner's phones through ntfy (free app on iPhone and Android, no account)."""
     notify_log.insert(0, {"t": time.strftime("%Y-%m-%d %H:%M"), "title": title, "body": body})
     del notify_log[30:]
     broadcast({"t": "notify", "title": title, "body": body})
     n = AUTO.get("notify", {})
-    if not n.get("on") or not n.get("topic"):
+    if not n.get("topic") or not (n.get("on") or force):
         return
     base = (n.get("server") or "https://ntfy.sh").rstrip("/")
     try:
@@ -1660,11 +1661,36 @@ def _http_get(url: str, timeout: int) -> bytes:
         return r.read()
 
 
-def ota_fetch() -> int:
-    """Download a newer page/Python bundle into DATA/ota. Returns its version, 0 when there is nothing new."""
+def released_web() -> int:
+    """Newest page/Python version the company released (TAT Admin > نشر). 0 = no gate.
+    The last answer is kept, so a server hiccup never lets an unreleased build through."""
+    keep = DATA / "release.json"
+    base = str(CFG.get("relay_url") or "").strip().rstrip("/")
+    if base:
+        try:
+            rel = json.loads(_http_get(base + "/release.json?t=%d" % int(time.time()), 15))
+            keep.write_text(json.dumps(rel), encoding="utf-8")
+        except urllib.error.HTTPError as err:
+            if err.code == 404:  # company has not released anything yet: no gate
+                keep.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        return int(json.loads(keep.read_text(encoding="utf-8")).get("web") or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def ota_fetch(forced: bool = False) -> int:
+    """Download a newer page/Python bundle into DATA/ota. Returns its version, 0 when there is nothing new.
+    Only versions the company released are taken; the technician's "update now" takes the newest (for testing)."""
     man = json.loads(_http_get(OTA_BASE + "manifest.json?t=%d" % int(time.time()), 20))
     ver = int(man.get("ver", 0))
     if ver <= WEB_VER:
+        return 0
+    rel = 0 if forced else released_web()
+    if rel and ver > rel:
+        ota_state["state"] = "held"  # built but not released by the company yet
         return 0
     try:
         app_code = int(os.environ.get("KNX_APP_CODE") or 0)
@@ -1718,9 +1744,10 @@ async def ota_loop() -> None:
         forced = ota_kick.is_set()
         ota_kick.clear()
         try:
-            ver = await asyncio.to_thread(ota_fetch)
+            ota_state["state"] = ""
+            ver = await asyncio.to_thread(ota_fetch, forced)
             ota_state.update(checked=int(time.time()))
-            if ota_state["state"] != "needs_app":
+            if ota_state["state"] not in ("needs_app", "held"):
                 ota_state["state"] = "ok"
             if ver:
                 ota_state["new"] = ver
@@ -1959,7 +1986,7 @@ async def relay_loop() -> None:
     async with aiohttp.ClientSession() as session:
         while True:
             try:
-                async with session.ws_connect(f"{wsbase}/agent?house={house}&key={key}", heartbeat=25, max_msg_size=0) as ws:
+                async with session.ws_connect(f"{wsbase}/agent", params={"house": house, "key": key, "v": str(WEB_VER), "app": os.environ.get("KNX_APP_CODE", ""), "name": str(CFG.get("company_name") or CFG.get("house_name") or "")[:60]}, heartbeat=25, max_msg_size=0) as ws:
                     if not shown:
                         print("\n  ==============================================")
                         print("  REMOTE LINK (fixed, works from anywhere):")
@@ -1977,6 +2004,8 @@ async def relay_loop() -> None:
                             asyncio.ensure_future(do_http(session, ws, m))
                         elif m.get("op") == "stream":
                             asyncio.ensure_future(do_stream(session, m))
+                        elif m.get("op") == "notify":  # message from the company (TAT Admin)
+                            asyncio.ensure_future(notify(str(m.get("title") or "TAT SMART")[:120], str(m.get("message") or "")[:1000], "company", True))
                 log.warning("Relay server disconnected, retrying")
                 relay_state.update(state="connecting", detail="")
             except aiohttp.WSServerHandshakeError as err:
