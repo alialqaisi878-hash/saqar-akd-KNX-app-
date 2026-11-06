@@ -117,7 +117,7 @@ public class ControlActivity extends Activity {
         if (isLocal) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0a101c"));
+        root.setBackgroundColor(Color.parseColor("#edf1f6"));
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
@@ -129,7 +129,7 @@ public class ControlActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (!r.isForMainFrame()) return;
-                v.loadData("<html><body style='background:#0a101c;color:#e2e8f0;font-family:sans-serif;display:flex;"
+                v.loadData("<html><body style='background:#edf1f6;color:#0f1a28;font-family:sans-serif;display:flex;"
                         + "align-items:center;justify-content:center;height:100vh;text-align:center'><div dir='rtl'>"
                         + "<h2>ما يوصل للبيت</h2><p>تأكد من النت. دا يعيد المحاولة...</p></div></body></html>",
                         "text/html; charset=utf-8", "UTF-8");
