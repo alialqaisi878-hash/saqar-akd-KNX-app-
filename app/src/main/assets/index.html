@@ -1189,18 +1189,18 @@ async function reloadProject(){try{const s=await fetch("api/project").then(r=>r.
 function sceneAudioHtml(sc){
  if(audioZones===null||music===null)return `<div class="muted" style="font-size:.8rem">جاري تحميل الأمبليفايرات…</div>`;
  if(!audioZones.length)return `<div class="muted" style="font-size:.8rem">ما اكو أمبليفايرات مضافة.</div>`;
- const opt=a=>{const v=a?(!a.on?"off":a.song?"s:"+a.song:a.url?"u:"+a.url:a.preset?"p:"+a.preset:"play"):"play";
+ const opt=a=>{const v=a?(!a.on?"off":a.src?"b:"+a.src:a.song?"s:"+a.song:a.url?"u:"+a.url:a.preset?"p:"+a.preset:"play"):"play";
   return `<option value="play"${v==="play"?" selected":""}>كمّل الشي الشغّال</option><option value="off"${v==="off"?" selected":""}>إيقاف</option>`+
   (music.songs.length?`<optgroup label="أغاني البيت">${music.songs.map(m=>`<option value="s:${esc(m.file)}"${v==="s:"+m.file?" selected":""}>${esc(m.name)}</option>`).join("")}</optgroup>`:"")+
   (music.stations.length?`<optgroup label="راديو">${music.stations.map(st=>`<option value="u:${esc(st.url)}"${v==="u:"+st.url?" selected":""}>${esc(st.name)}</option>`).join("")}</optgroup>`:"")+
-  `<optgroup label="مفضلات 4STREAM">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="p:${n}"${v==="p:"+n?" selected":""}>مفضلة ${n}</option>`).join("")}</optgroup>`;};
+  `<optgroup label="مصدر"><option value="b:bt"${v==="b:bt"?" selected":""}>بلوتوث (من التلفون)</option><option value="b:aux"${v==="b:aux"?" selected":""}>AUX</option></optgroup><optgroup label="مفضلات 4STREAM">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="p:${n}"${v==="p:"+n?" selected":""}>مفضلة ${n}</option>`).join("")}</optgroup>`;};
  return audioZones.map(z=>{const a=(sc.actions||[]).find(x=>x.audio===z.id);
   return `<label style="flex-wrap:wrap"><input type="checkbox" data-sau="${esc(z.id)}" ${a?"checked":""}>🎵 ${esc(z.name)} <span class="muted">${esc(z.room||"")}</span>
    <select data-sauw="${esc(z.id)}" style="width:auto;max-width:52%;padding:2px 6px;margin-inline-start:auto">${opt(a)}</select>
    <input type="number" data-sauv="${esc(z.id)}" min="0" max="100" value="${a&&a.vol!=null?a.vol:""}" placeholder="صوت" style="width:64px;padding:2px 6px"></label>`;}).join("");
 }
 function sceneAudioRead(s){return [...s.querySelectorAll("[data-sau]")].filter(c=>c.checked).map(c=>{const id=c.dataset.sau,w=s.querySelector(`[data-sauw="${id}"]`).value,v=s.querySelector(`[data-sauv="${id}"]`).value;
- const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:"))a.url=w.slice(2);if(w.startsWith("p:"))a.preset=+w.slice(2);return a;});}
+ const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:"))a.url=w.slice(2);if(w.startsWith("p:"))a.preset=+w.slice(2);if(w.startsWith("b:"))a.src=w.slice(2);return a;});}
 function editScene(id){
  const p=P();p.scenes=p.scenes||[];const old=p.scenes.find(s=>s.id===id);
  const sc=old?JSON.parse(JSON.stringify(old)):{id:uid(),name:"",icon:"sofa",actions:[]};
@@ -1354,7 +1354,7 @@ function renderUp(){const el=document.querySelector("[data-upprog]");if(el){el.t
 function libHtml(){
  if(music===null){loadMusic();return `<div class="dcard" style="min-height:0;margin-top:14px"><span class="dmut">جاري تحميل المكتبة…</span></div>`;}
  const z=audioZones||[];
- const tabs=[["radio","📻 إذاعات وأغاني"],["songs","🎵 أغاني البيت"],["presets","🟢 Spotify"]];
+ const tabs=[["radio","📻 إذاعات وأغاني"],["bt","🔵 بلوتوث"],["songs","🎵 أغاني البيت"],["presets","🟢 Spotify"]];
  let body="";
  if(libTab==="songs")body=`<label class="dbtn p" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">⬆ ضيف أغاني من التلفون<input type="file" accept="audio/*,.mp3,.m4a,.aac,.flac,.wav,.ogg" multiple data-upsong hidden></label>
   <p class="dmut" style="font-size:.78rem;margin:6px 0 0">من أي تلفون بالبيت، أندرويد أو آيفون، حتى من برا البيت. الأغنية تنحفظ على تابلت البيت وتشتغل للكل.</p><div class="dmut" data-upprog style="font-size:.82rem;margin-top:6px;${upProg?"":"display:none"}">${esc(upProg)}</div>
@@ -1364,6 +1364,13 @@ function libHtml(){
   ${radioRes==="busy"?`<p class="dmut">جاري البحث…</p>`:Array.isArray(radioRes)?`<div class="slist">${radioRes.map((st,i)=>`<div class="srow"><button class="splay" data-rplay="${i}" aria-label="شغّل">▶</button>${st.logo?`<img src="${esc(st.logo)}" alt="" class="rlogo" onerror="this.remove()" loading="lazy" referrerpolicy="no-referrer">`:""}<span class="sname">${esc(st.name)}<small class="dmut" style="display:block;font-size:.72rem">${esc([st.country,st.kbps?st.kbps+"kbps":""].filter(Boolean).join(" · "))}</small></span><button class="dbtn" data-rsave="${i}" aria-label="احفظ">☆</button></div>`).join("")||`<p class="dmut">ما لكيت شي. جرّب كلمة ثانية أو بالإنكليزي.</p>`}</div>`:""}
   <b style="display:block;margin-top:12px">⭐ إذاعاتي</b><div class="slist">${music.stations.map((st,i)=>`<div class="srow"><button class="splay" data-pradio="${i}" aria-label="شغّل">▶</button><span class="sname">${esc(st.name)}</span><button class="dbtn" data-dradio="${i}" aria-label="حذف">✕</button></div>`).join("")||`<p class="dmut" style="font-size:.85rem">دوس ☆ على أي إذاعة حتى تنحفظ هنا.</p>`}</div>
   ${stAdd?`<div class="irow" data-keep="1"><label>الاسم<input class="setin" id="stName" placeholder="إذاعة القرآن"></label><label style="grid-column:span 2">رابط البث<input class="setin" id="stUrl" dir="ltr" placeholder="https://...mp3"></label><button class="dbtn p" data-saverad="1">حفظ</button></div>`:`<button class="dbtn" data-addrad="1">+ إذاعة</button>`}`;
+ if(libTab==="bt"){const bz=z.filter(x=>x.online);
+  body=`<div class="sphow"><b>شغّل أي شي من تلفونك (يوتيوب، أنغامي، Apple Music…) على السماعات:</b>
+  <ol><li>دوس "شغّل بلوتوث" على الغرفة اللي تريدها.</li><li>افتح إعدادات البلوتوث بتلفونك واختار اسم الأمبليفاير.</li><li>شغّل أي أغنية بتلفونك، وتطلع من سماعات الغرفة.</li></ol>
+  <p class="dmut" style="font-size:.8rem;margin:0">البلوتوث يوصل لحد 10 متر تقريباً، فلازم تكون بنفس البيت. الصوت تتحكم بيه من هنا.</p></div>
+  <div class="slist" style="margin-top:10px">${bz.map(x=>{const on=x.mode==="41";return `<div class="srow"><span class="sname" style="white-space:normal;overflow:visible"><b>${esc(x.name)}</b>${x.room?` <span class="dmut">${esc(x.room)}</span>`:""}
+   <span class="dmut" style="display:block;font-size:.78rem">${on?"🔵 البلوتوث شغّال · بالتلفون اختار: ":"اسم البلوتوث: "}<b class="num" style="color:var(--acc,#6c9ce6)">${esc(x.devname||x.name)}</b></span></span>
+   ${on?`<button class="dbtn" data-asrc="${esc(x.id)}|wifi">رجّع واي فاي</button>`:`<button class="dbtn p" data-asrc="${esc(x.id)}|bt">🔵 شغّل بلوتوث</button>`}</div>`;}).join("")||`<p class="dmut">ما اكو أمبليفاير متصل هسه.</p>`}</div>`;}
  if(libTab==="presets")body=`<div class="sphow"><b>أي أغنية تريدها من Spotify:</b><ol><li>افتح Spotify واختار الأغنية.</li><li>دوس أيقونة السماعات 🔊 تحت.</li><li>اختار اسم الأمبليفاير (${esc((z[0]||{}).name||"الصالة")}).</li></ol><p class="dmut" style="font-size:.8rem;margin:0">وبعدها تتحكم بيها من هنا: إيقاف، التالي، الصوت.</p><a class="dbtn p" href="https://open.spotify.com/search" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;text-decoration:none">افتح Spotify</a></div>
   <p class="dmut" style="font-size:.82rem;margin:12px 0 8px">مفضلات محفوظة بالأمبليفاير (من تطبيق 4STREAM):</p><div class="pgrid">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="dbtn" data-ppre="${n}">⭐ ${n}</button>`).join("")}</div>`;
  return `<div class="dcard lib" data-keep="1" style="min-height:0;margin-top:14px">
@@ -1697,7 +1704,9 @@ function dashClick(e){
  if(b=q("[data-anext]")){audioCmd(b.dataset.anext,"next");return;}
  if(b=q("[data-aprev]")){audioCmd(b.dataset.aprev,"prev");return;}
  if(b=q("[data-amute]")){const z=audioZones.find(x=>x.id===b.dataset.amute);audioCmd(z.id,"mute",z.mute?0:1);renderDash();return;}
- if(b=q("[data-asrc]")){const [id,k]=b.dataset.asrc.split("|");audioCmd(id,"src",k);toast("تحوّل المصدر");return;}
+ if(b=q("[data-asrc]")){const [id,k]=b.dataset.asrc.split("|");audioCmd(id,"src",k);const zz=(audioZones||[]).find(x=>x.id===id);
+  if(zz){zz.mode=k==="bt"?"41":k==="aux"?"40":"10";zz.source=k==="bt"?"بلوتوث":k==="aux"?"AUX":"واي فاي";}
+  toast(k==="bt"?"🔵 البلوتوث شغّال: من تلفونك اختار "+((zz&&(zz.devname||zz.name))||"الأمبليفاير"):"تحوّل المصدر");renderDash();return;}
  if(b=q("[data-findaud]")){findAudio();return;}
  if(b=q("[data-rchip]")){const [k,v,n]=b.dataset.rchip.split("|");radioFind({[k]:v},n);return;}
  if(b=q("[data-rplay]")){const st=radioRes[+b.dataset.rplay];playOn("url",st.url,st.name);return;}

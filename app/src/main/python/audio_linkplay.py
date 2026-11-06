@@ -16,6 +16,7 @@ MODES = {"1": "AirPlay", "2": "DLNA", "10": "واي فاي", "11": "USB", "16": 
          "31": "Spotify", "32": "TIDAL", "40": "AUX", "41": "بلوتوث", "43": "Optical", "47": "AUX", "49": "HDMI"}
 SOURCES = {"wifi": "wifi", "aux": "line-in", "bt": "bluetooth", "optical": "optical", "usb": "udisk"}
 _scheme: dict[str, str] = {}  # ip -> "http" or "https" that answered last time
+_devname: dict[str, str] = {}  # ip -> the name the amplifier shows (also its Bluetooth name)
 
 
 async def command(sess: aiohttp.ClientSession, ip: str, cmd: str, timeout: float = 3) -> str:
@@ -62,7 +63,13 @@ async def status(sess: aiohttp.ClientSession, ip: str) -> dict:
         except Exception:  # noqa: BLE001
             pass
     mode = str(raw.get("mode", ""))
-    return {"online": True, "playing": raw.get("status") == "play", "state": raw.get("status", ""),
+    if ip not in _devname:
+        try:
+            ex = json.loads(await command(sess, ip, "getStatusEx", 2))
+            _devname[ip] = str(ex.get("BT_name") or ex.get("DeviceName") or ex.get("ssid") or "")[:60]
+        except Exception:  # noqa: BLE001
+            _devname[ip] = ""
+    return {"devname": _devname.get(ip, ""), "online": True, "playing": raw.get("status") == "play", "state": raw.get("status", ""),
             "vol": int(raw.get("vol") or 0), "mute": str(raw.get("mute")) == "1",
             "mode": mode, "source": MODES.get(mode, ""), "title": title[:120], "artist": artist[:120]}
 
