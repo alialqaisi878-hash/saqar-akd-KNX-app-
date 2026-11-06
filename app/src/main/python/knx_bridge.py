@@ -1332,6 +1332,99 @@ def is_installer(req) -> bool:
     return req.cookies.get("knxinst") == INST_TOKEN or req.headers.get("X-Key") == INSTALLER_PW
 
 
+# ---------------------------------------------------------------- online update (no reinstall)
+# The page and the Python files come from the apk branch (web/manifest.json + files, sha256 checked).
+# boot.py runs the newest downloaded copy; a copy that crashes right away is rolled back.
+OTA_BASE = str(CFG.get("ota_url") or "https://raw.githubusercontent.com/alialqaisi878-hash/saqar-akd-KNX-app-/apk/web/")
+WEB_VER = int(os.environ.get("KNX_WEB_VER") or 0)
+ota_state = {"ver": WEB_VER, "new": 0, "state": "", "checked": 0}
+restart_evt: asyncio.Event | None = None
+ota_kick: asyncio.Event | None = None
+
+
+def _http_get(url: str, timeout: int) -> bytes:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "KNXProg"}), timeout=timeout) as r:
+        return r.read()
+
+
+def ota_fetch() -> int:
+    """Download a newer page/Python bundle into DATA/ota. Returns its version, 0 when there is nothing new."""
+    man = json.loads(_http_get(OTA_BASE + "manifest.json?t=%d" % int(time.time()), 20))
+    ver = int(man.get("ver", 0))
+    if ver <= WEB_VER:
+        return 0
+    try:
+        app_code = int(os.environ.get("KNX_APP_CODE") or 0)
+    except ValueError:
+        app_code = 0
+    if int(man.get("min_app", 0)) > app_code:
+        ota_state["state"] = "needs_app"  # this change needs a new KNX Prog APK
+        return 0
+    try:
+        if int((DATA / "ota.bad").read_text().strip() or 0) == ver:
+            return 0
+    except Exception:  # noqa: BLE001
+        pass
+    files = man.get("files") or {}
+    have = DATA / "ota"
+    try:
+        old = json.loads((have / "manifest.json").read_text(encoding="utf-8"))
+        if int(old.get("ver", 0)) == ver and all((have / f).is_file() for f in files):
+            return ver  # already downloaded, waiting for the restart
+    except Exception:  # noqa: BLE001
+        pass
+    tmp = DATA / "ota.new"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    for name, sha in files.items():
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
+            raise ValueError("bad file name " + name)
+        body = _http_get(OTA_BASE + name + "?v=%d" % ver, 90)
+        if hashlib.sha256(body).hexdigest() != sha:
+            raise ValueError("checksum mismatch " + name)
+        (tmp / name).write_bytes(body)
+    (tmp / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
+    shutil.rmtree(DATA / "ota.old", ignore_errors=True)
+    if have.exists():
+        have.rename(DATA / "ota.old")
+    tmp.rename(have)
+    return ver
+
+
+async def ota_loop() -> None:
+    """Check every hour; a new version is applied at night (2-5) or right away when the technician asks."""
+    global ota_kick
+    ota_kick = asyncio.Event()
+    if os.environ.get("KNX_WEB_VER") is None:
+        return  # not started by KNX Prog (PC copy): nothing to update
+    try:
+        await asyncio.wait_for(ota_kick.wait(), 90)
+    except asyncio.TimeoutError:
+        pass
+    while True:
+        forced = ota_kick.is_set()
+        ota_kick.clear()
+        try:
+            ver = await asyncio.to_thread(ota_fetch)
+            ota_state.update(checked=int(time.time()))
+            if ota_state["state"] != "needs_app":
+                ota_state["state"] = "ok"
+            if ver:
+                ota_state["new"] = ver
+        except Exception as err:  # noqa: BLE001
+            ota_state["state"] = f"error: {err}"[:200]
+            log.warning("online update check failed: %s", err)
+        if ota_state["new"] and (forced or 2 <= time.localtime().tm_hour < 5):
+            log.info("online update %s downloaded, restarting the bridge", ota_state["new"])
+            if restart_evt is not None:
+                restart_evt.set()
+            return
+        try:
+            await asyncio.wait_for(ota_kick.wait(), 3600)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def bridge_info(_req):
     """Status for the KNX Prog app screen."""
     return web.json_response({
@@ -1339,6 +1432,7 @@ async def bridge_info(_req):
         "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
         "assistant": ("gemini" if AI_KEY.startswith("AIza") else "claude") if AI_KEY else "local",
         "app": os.environ.get("KNX_APP_VERSION", ""),
+        "web_ver": WEB_VER, "ota": ota_state,
         "lan": [f"http://{ip}:{PORT}/" for ip in local_ips() if not ip.startswith("127.")],
         "ets": {"sessions": ets_sessions["n"], "ready": bool((CFG.get("gateway_ip") or "").strip()) and bool(INSTALLER_PW or REMOTE_PW)},
     })
@@ -1349,6 +1443,8 @@ async def request_update(req):
     if not is_installer(req):
         return web.json_response({"error": "installer only"}, status=403)
     (DATA / "update.request").write_text("1")
+    if ota_kick is not None:
+        ota_kick.set()  # also fetch + apply the newest page/Python right away
     return web.json_response({"ok": True})
 
 
@@ -1792,7 +1888,22 @@ async def main() -> None:
         asyncio.create_task(relay_loop())
     else:
         asyncio.create_task(remote_loop())
-    await asyncio.Event().wait()
+    global restart_evt
+    restart_evt = asyncio.Event()
+    asyncio.create_task(ota_loop())
+    await restart_evt.wait()
+    # online update: free the port and the KNX connection, boot.py starts the new copy
+    for w in list(clients):
+        try:
+            await w.close()
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        if xknx is not None:
+            await xknx.stop()
+    except Exception:  # noqa: BLE001
+        pass
+    await runner.cleanup()
 
 
 def run() -> None:

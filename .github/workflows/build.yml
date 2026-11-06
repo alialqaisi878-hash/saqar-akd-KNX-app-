@@ -41,6 +41,8 @@ jobs:
           else
             echo "KEYSTORE_B64 secret missing: debug key (updates need uninstall)"
           fi
+      - name: Version of the page/Python inside the APK
+        run: echo "${{ github.run_number }}" > app/src/main/assets/webver.txt
       - name: Build
         env:
           TAT_KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
@@ -62,10 +64,22 @@ jobs:
           TC=$(grep -oP 'versionCode = \K[0-9]+' control/build.gradle.kts); TN=$(grep -oP 'versionName = "\K[^"]+' control/build.gradle.kts)
           echo "{\"knxprog\":{\"code\":$KC,\"name\":\"$KN\"},\"tatsmart\":{\"code\":$TC,\"name\":\"$TN\"}}" > /tmp/out/version.json
           cat /tmp/out/version.json
+          # online update bundle for KNX Prog (no reinstall): page + Python, sha256 in the manifest
+          mkdir -p /tmp/out/web
+          cp app/src/main/assets/index.html app/src/main/python/knx_bridge.py app/src/main/python/assistant.py \
+             app/src/main/python/tuya_cloud.py app/src/main/python/solis_cloud.py /tmp/out/web/
+          MIN=$(python3 -c "import json;print(json.load(open('ota.json'))['min_app'])")
+          python3 - "$MIN" "${{ github.run_number }}" <<'PY'
+          import hashlib, json, os, sys
+          d = "/tmp/out/web"
+          files = {f: hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest() for f in sorted(os.listdir(d))}
+          json.dump({"ver": int(sys.argv[2]), "min_app": int(sys.argv[1]), "files": files}, open(os.path.join(d, "manifest.json"), "w"))
+          PY
+          cat /tmp/out/web/manifest.json
           cd /tmp/out
           git init -q -b apk
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add *.apk version.json
+          git add *.apk version.json web
           git commit -q -m "APK from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" apk

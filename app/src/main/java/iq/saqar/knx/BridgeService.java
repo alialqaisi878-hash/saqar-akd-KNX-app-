@@ -100,10 +100,16 @@ public class BridgeService extends Service {
             try {
                 File web = new File(ctx.getFilesDir(), "web");
                 if (!web.exists()) web.mkdirs();
-                Config.copy(ctx.getAssets().open("index.html"), new File(web, "index.html"));
-                Config.copy(ctx.getAssets().open("three.js"), new File(web, "three.js"));
-                for (String ic : new String[]{"tat-180.png", "tat-192.png", "tat-512.png"})
-                    Config.copy(ctx.getAssets().open(ic), new File(web, ic));
+                File keep = new File(web, "apk");  // the APK's own page, used again if an online update is rolled back
+                if (!keep.exists()) keep.mkdirs();
+                for (String f : new String[]{"index.html", "three.js", "tat-180.png", "tat-192.png", "tat-512.png"}) {
+                    Config.copy(ctx.getAssets().open(f), new File(web, f));
+                    Config.copy(ctx.getAssets().open(f), new File(keep, f));
+                }
+                String webVer = "0";
+                try (java.io.InputStream in = ctx.getAssets().open("webver.txt")) {
+                    webVer = new String(readAll(in), "UTF-8").trim();
+                } catch (Exception ignored) { }
                 if (!Python.isStarted()) Python.start(new AndroidPlatform(ctx));
                 Python py = Python.getInstance();
                 PyObject env = py.getModule("os").get("environ");
@@ -111,10 +117,15 @@ public class BridgeService extends Service {
                 env.callAttr("__setitem__", "KNX_BRIDGE_WEB", web.getAbsolutePath());
                 env.callAttr("__setitem__", "TZ", java.util.TimeZone.getDefault().getID());
                 env.callAttr("__setitem__", "KNX_APP_VERSION", BuildInfo.name(ctx) + " (" + Updater.localCode(ctx) + ")");
-                PyObject bridge = py.getModule("knx_bridge");
+                env.callAttr("__setitem__", "KNX_APP_CODE", String.valueOf(Updater.localCode(ctx)));
+                env.callAttr("__setitem__", "KNX_WEB_BUNDLED", webVer);
+                // boot.py runs the newest online update of the page + Python (no reinstall), else the APK copy
+                PyObject boot = py.getModule("boot");
                 while (true) {
                     try {
-                        bridge.callAttr("run");
+                        boot.callAttr("run");
+                        Thread.sleep(1000);  // returned for an online update: start the new copy
+                        continue;
                     } catch (Throwable t) {
                         Log.e(TAG, "bridge stopped, restarting in 5 s", t);
                     }
@@ -135,4 +146,12 @@ public class BridgeService extends Service {
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
+
+    private static byte[] readAll(java.io.InputStream in) throws java.io.IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        return out.toByteArray();
+    }
 }

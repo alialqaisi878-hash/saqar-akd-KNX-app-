@@ -648,6 +648,7 @@ function setTag(){
  t.textContent=m[0];t.className="tag "+m[1];
 }
 function statusGas(){const s=new Set();db.projects.forEach(p=>p.devices.forEach(d=>["status","valueStatus","positionStatus","temp","setpoint","cmd"].forEach(k=>{const a=d.ga&&d.ga[k];if(a)s.add(a);})));return [...s];}
+let WEBVER=null; /* page reloads itself after an online update of KNX Prog */
 function connect(){
  ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+location.pathname.replace(/[^/]*$/,"")+"ws");
  ws.onmessage=e=>{
@@ -665,6 +666,7 @@ function connect(){
   if(m.t==="error")toast(m.msg);
   if(m.t==="remote"&&location.protocol!=="https:"){const t=$("#connTag");if(t){let a=document.getElementById("remoteLink");if(!a){a=document.createElement("a");a.id="remoteLink";a.className="tag";a.target="_blank";a.style.marginInlineStart="6px";t.after(a);}a.href=m.url;a.textContent="🌐 رابط من برة البيت";a.title=m.url;}}
  };
+ ws.onopen=()=>{fetch("api/bridge").then(r=>r.json()).then(b=>{if(b.web_ver==null)return;if(WEBVER==null)WEBVER=b.web_ver;else if(b.web_ver!==WEBVER)location.reload();}).catch(()=>{});};
  ws.onclose=()=>{knxState="offline";setTag();setTimeout(connect,3000);};
 }
 function f16(b){const raw=(b[0]<<8)|b[1];let m=raw&0x7ff;if(raw&0x8000)m=m-2048;const e=(raw>>11)&0xf;return Math.round(m*Math.pow(2,e))/100;}
@@ -1380,7 +1382,7 @@ function mntLinks(){const b=bInfo;if(!b)return `<div class="mlinks dmut">جار�
  return `<div class="mlinks">
  ${it(k.state==="connected","شبكة KNX (IP Router)",(b.gateway?esc(b.gateway)+" · ":"")+(k.state==="connected"?"متصل":"غير متصل"))}
  ${it(r.state==="connected","سيرفر TAT (الوصول من برة البيت)",r.state==="connected"?(b.link?`<a href="${esc(b.link)}" target="_blank" class="ft">${esc(b.link.replace(/^https?:\/\//,""))}</a>`:"متصل"):r.state==="connecting"?"جاري الاتصال…":"غير متصل")}
- ${it(true,"KNX Prog "+esc(b.app||""),`<button class="dbtn" data-gupd style="margin-top:6px">⬇ تحديث للنسخة الأحدث</button>`)}
+ ${it(true,"KNX Prog "+esc(b.app||""),`<span style="display:block">${b.web_ver!=null?"نسخة الواجهة "+b.web_ver+(b.ota&&b.ota.new?" · نازل تحديث "+b.ota.new+" (ينطبق بالليل أو هسه بالزر)":b.ota&&b.ota.state==="needs_app"?" · التحديث الجاي يحتاج APK جديد":b.ota&&String(b.ota.state).startsWith("error")?" · ما كدر يفحص التحديث (نت؟)":" · محدّث"):""}</span><button class="dbtn" data-gupd style="margin-top:6px">⬇ تحديث للنسخة الأحدث</button>`)}
  ${it(e.ready,"برمجة ETS عن بعد",e.sessions?`ETS متصل هسه (${e.sessions})`:e.ready?"جاهز: افتح SaqarETS على الحاسبة واكتب رابط البيت وكلمة سر الفني":"يحتاج IP الراوتر وكلمة سر الفني بإعدادات KNX Prog")}
  </div>`;}
 function dashMaint(){
@@ -1415,7 +1417,7 @@ function mntClick(t){let b;const p=P();const q=s=>t.closest(s);const ga=a=>p.gas
  if(b=q("[data-gs]")){const g=ga(b.dataset.gs);const i=document.querySelector(`[data-gx="${g.addr}"]`);const v=i&&i.value.trim();if(v===""||isNaN(+v)){toast("اكتب قيمة رقم");return true;}if(!live()){toast("الـ KNX غير متصل");return true;}telegram(g.addr,gaDptFix(g.dpt),+v,g.name);toast("انرسل "+v+" على "+g.addr);return true;}
  if(b=q("[data-gr]")){if(!live()){toast("الـ KNX غير متصل");return true;}ws.send(JSON.stringify({t:"read",gas:[b.dataset.gr]}));return true;}
  if(q("[data-greadall]")){if(!live()){toast("الـ KNX غير متصل");return true;}const gs=[...document.querySelectorAll("[data-mrow]:not([hidden])")].map(r=>r.dataset.mrow).slice(0,200);ws.send(JSON.stringify({t:"read",gas:gs}));toast("قراءة "+gs.length+" عنوان");return true;}
- if(q("[data-gupd]")){fetch("api/update",{method:"POST"}).then(r=>toast(r.ok?"انطلب التحديث: يطلع طلب التثبيت على تابلت البيت خلال دقيقة":"ما صار")).catch(()=>toast("ما صار"));return true;}
+ if(q("[data-gupd]")){fetch("api/update",{method:"POST"}).then(r=>toast(r.ok?"انطلب التحديث: الواجهة تتحدث وحدها خلال دقيقة، وإذا اكو APK جديد يطلع طلب التثبيت على التابلت":"ما صار")).catch(()=>toast("ما صار"));return true;}
  if(q("[data-bclear]")){busLog.length=0;renderDash();return true;}
  if(q("[data-bcheck]")){if(!live()){toast("الـ KNX غير متصل");return true;}const gs=statusGas();if(!gs.length){toast("ماكو أجهزة بعناوين حالة");return true;}
   busCheck={total:gs.length,seen:new Set(),done:false,miss:[]};ws.send(JSON.stringify({t:"read",gas:gs}));renderDash();
@@ -1486,7 +1488,8 @@ function dashAuto(){
  <div class="dsec">🔔 الإشعارات على التلفون</div>
  <div class="dcard acard">
   <div class="arow"><button class="tgl${n.on?" on":""}" data-ntog><i></i></button><b>${n.on?"الإشعارات شغّالة":"الإشعارات طافية"}</b><button class="dbtn" data-ntest>إرسال تجربة</button></div>
-  <div class="dmut">نزّل تطبيق <b>ntfy</b> المجاني (آيفون وأندرويد)، وبيه دوس + واكتب هذا الاسم: <b class="ft">${esc(n.topic||"")}</b> ${copyBtn(n.topic||"")}. كل أفراد البيت يكدرون يشتركون.</div>
+  ${hasPush()?`<div class="arow"><button class="tgl${TATApp.pushState()!=="off"?" on":""}" data-ptog><i></i></button><b>${TATApp.pushState()==="on"?"🔔 التنبيهات توصل لهذا التلفون حتى والتطبيق مسدود":TATApp.pushState()==="need_permission"?"اسمح بالإشعارات من إعدادات التلفون":"التنبيهات طافية على هذا التلفون"}</b></div>`:""}
+  <div class="dmut">${hasPush()?"للآيفون ولباقي الأجهزة: ":""}نزّل تطبيق <b>ntfy</b> المجاني (آيفون وأندرويد)، وبيه دوس + واكتب هذا الاسم: <b class="ft">${esc(n.topic||"")}</b> ${copyBtn(n.topic||"")}. كل أفراد البيت يكدرون يشتركون.</div>
   ${(auto.log||[]).length?`<div class="alog">${auto.log.slice(0,6).map(x=>`<div><small class="ft">${esc(x.t)}</small> <b>${esc(x.title)}</b> ${esc(x.body)}</div>`).join("")}</div>`:""}
  </div>
  <div class="dsec">🎙 Siri والأوامر الصوتية</div>
@@ -1511,7 +1514,8 @@ function autoClick(t){const q=s=>t.closest(s);let b;
   const scn=(P().scenes||[]).find(s=>s.id===sc);const lbl=needD?ds.options[ds.selectedIndex].text:"";
   const w={type:ty};if(needV)w.value=+v;if(needD){w.ga=ds.value;w.label=lbl;}if(ty==="arrive"||ty==="leave")w.who=who;
   auto.rules.push({id:uid(),on:true,name:AUTO_T[ty].replace(/ \(.*\)/,"").replace(/^من /,"")+(needV?" "+v:"")+(who?" ("+who+")":""),when:w,then:{scene:sc,notify:$("#rN").checked},cooldown:10});saveAuto();return true;}
- if(q("[data-ntog]")){auto.notify.on=!auto.notify.on;saveAuto();return true;}
+ if(q("[data-ntog]")){auto.notify.on=!auto.notify.on;saveAuto();if(hasPush())TATApp.push(auto.notify.topic||"",!!auto.notify.on);return true;}
+ if(q("[data-ptog]")){const on=TATApp.pushState()==="off";try{localStorage.setItem("tat_push_off",on?"":"1");}catch(e){}TATApp.push((auto.notify&&auto.notify.topic)||"",on&&!!(auto.notify&&auto.notify.on));if(on&&!(auto.notify&&auto.notify.on))toast("شغّل الإشعارات فوق أول");setTimeout(renderDash,600);return true;}
  if(q("[data-ntest]")){fetch("api/auto/test",{method:"POST"}).then(r=>r.json()).then(j=>toast(j.on?"انرسل، شوف التلفون":"شغّل الإشعارات أول")).catch(()=>toast("ما صار"));return true;}
  if(q("[data-anewtok]")){if(confirm("تغيّر الرمز؟ لازم تحدّث روابط Siri والآيفون بعدها")){saveAuto({new_token:true});}return true;}
  return false;}
@@ -1933,6 +1937,10 @@ $("#vw2").onclick=()=>{view3d=false;try{localStorage.setItem("knx-view","2d");}c
 $("#vw3").onclick=()=>{if(!P().plan){toast("ارفع خريطة أول");return;}view3d=true;try{localStorage.setItem("knx-view","3d");}catch(e){}renderStage();};
 try{view3d=localStorage.getItem("knx-view")==="3d";}catch(e){}
 
+function hasPush(){return !!(window.TATApp&&TATApp.push&&TATApp.pushState);}
+/* TAT SMART on Android: house alerts arrive as phone notifications, switched on by itself when the house sends alerts */
+(function(){if(!CUSTOMER_APP||!hasPush())return;let off="";try{off=localStorage.getItem("tat_push_off")||"";}catch(e){}
+ fetch("api/auto").then(r=>r.ok?r.json():null).then(a=>{const n=a&&a.notify;if(!n||!n.topic)return;if(n.on&&!off&&TATApp.pushState()==="off")TATApp.push(n.topic,true);else if(!n.on&&TATApp.pushState()!=="off")TATApp.push(n.topic,false);}).catch(()=>{});})();
 (function(){if(CUSTOMER_APP&&window.TATApp&&TATApp.setLan&&location.protocol==="https:")fetch("api/bridge").then(r=>r.json()).then(b=>{if(b.lan&&b.lan.length)TATApp.setLan(JSON.stringify(b.lan));}).catch(()=>{});})();
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;if(CUSTOMER_APP){if(role.installer&&role.locked)fetch("api/installer/logout",{method:"POST"}).catch(()=>{});role={installer:false,locked:false};}}).catch(()=>{})
 .then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());});

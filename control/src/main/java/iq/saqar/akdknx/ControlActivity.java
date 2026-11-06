@@ -220,6 +220,21 @@ public class ControlActivity extends Activity {
             Geo.disable(ControlActivity.this);
             runOnUiThread(() -> Toast.makeText(ControlActivity.this, "انطفى الوصول التلقائي", Toast.LENGTH_SHORT).show());
         }
+        /** House alerts on this phone (ntfy topic of the house). */
+        @android.webkit.JavascriptInterface public void push(String topic, boolean on) {
+            runOnUiThread(() -> {
+                if (on && android.os.Build.VERSION.SDK_INT >= 33
+                        && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 53);
+                Push.set(ControlActivity.this, topic == null ? "" : topic.trim(), on);
+            });
+        }
+        @android.webkit.JavascriptInterface public String pushState() {
+            if (!Push.isOn(ControlActivity.this)) return "off";
+            if (android.os.Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return "need_permission";
+            return "on";
+        }
         @android.webkit.JavascriptInterface public String geoState() {
             return prefs.getString("geo", "").isEmpty() ? "off" : Geo.hasPermission(ControlActivity.this) ? "on" : "need_permission";
         }
