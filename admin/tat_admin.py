@@ -39,7 +39,8 @@ def data_dir() -> Path:
     try:
         p = ptr.read_text(encoding="utf-8-sig").strip().strip('"')
         if p:
-            return Path(p)
+            d = Path(p.replace("\\", os.sep) if os.sep == "/" else p)
+            return d if d.is_absolute() else (HERE / d).resolve()
     except OSError:
         pass
     return HERE / "TATAdmin-data"
@@ -444,9 +445,13 @@ lockScreen();
 
 
 def main() -> None:
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{PORT}/"
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+    except OSError:  # already open: just show it
+        webbrowser.open(url)
+        return
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
     if os.environ.get("TAT_ADMIN_NOGUI"):
         print("TAT Admin on", url, "db", DB_FILE, flush=True)
         threading.Event().wait()
