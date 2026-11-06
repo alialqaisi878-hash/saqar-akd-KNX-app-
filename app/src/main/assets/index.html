@@ -183,6 +183,22 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .dchip{background:var(--d-card);border:1px solid var(--d-line);border-radius:99px;padding:6px 12px;font-size:.8rem;color:var(--d-mut)}
 .dchip b{color:var(--d-ink)}
 .dgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.azones{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.azone .arow1{display:flex;align-items:center;gap:12px}
+.azone .aart{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:var(--d-card2);color:var(--d-acc);flex:none}
+.azone .aart svg{width:24px;height:24px}
+.azone.playing .aart{background:linear-gradient(135deg,#a98bf0,#446592);color:#fff}
+.azone .atitle{font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.azone .arow2{display:flex;gap:8px;margin:12px 0 8px;flex-wrap:wrap}
+.azone .aplay{flex:1}
+.azone .avol{display:flex;align-items:center;gap:10px;color:var(--d-mut);font-size:.85rem}
+.azone .avol input{flex:1;accent-color:#a98bf0;min-width:0}
+.azone .asrc{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.aeq{display:flex;align-items:flex-end;gap:3px;height:20px}
+.aeq i{width:3px;height:25%;border-radius:2px;background:#a98bf0}
+.aeq.on i{animation:aeq 1s ease-in-out infinite}.aeq.on i:nth-child(2){animation-delay:.15s}.aeq.on i:nth-child(3){animation-delay:.3s}.aeq.on i:nth-child(4){animation-delay:.45s}
+@keyframes aeq{0%,100%{height:25%}50%{height:100%}}
+@media (prefers-reduced-motion:reduce){.aeq.on i{animation:none}}
 .dcard{position:relative;background:linear-gradient(160deg,var(--d-card2),var(--d-card));border:1px solid var(--d-line);border-radius:18px;padding:14px;overflow:hidden;min-height:150px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .dcard h3{margin:0 0 8px;font-size:.92rem;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--d-ink)}
 .dcard h3 svg{width:17px;height:17px;color:var(--d-acc)}
@@ -660,6 +676,7 @@ function connect(){
   if(m.t==="schedules"){schedules=null;if(tab==="sch")renderPane();}
   if(m.t==="solar"){solarLive={configured:true,state:m.state,data:m.data};if(dashOn&&dpage==="solar")renderDash();}
   if(m.t==="cameras"){camList=null;if(dashOn&&dpage==="cams")renderDash();}
+  if(m.t==="audio"){audioZones=m.zones||[];if(dashOn&&dpage==="audio")renderDash();}
   if(m.t==="status"&&dashOn){if(dpage==="maint"&&role.installer)loadBInfo();else renderDash();}
   if(m.t==="tuya_err"&&role.installer)toast("تويا: "+m.msg);
   if(m.t==="notify"){toast("🔔 "+m.title+": "+m.body);if(auto){auto.log=[{t:new Date().toLocaleString("en-GB").slice(0,17),title:m.title,body:m.body}].concat(auto.log||[]);if(dashOn&&dpage==="auto")renderDash();}}
@@ -948,6 +965,7 @@ const DI={
  lock:SV('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
  power:SV('<path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/>'),
  bolt:SV('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'),
+ music:SV('<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>'),
  cam:SV('<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>'),
  sofa:SV('<path d="M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/><path d="M2 13a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v5H2z"/><path d="M5 18v2M19 18v2"/>'),
  film:SV('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 7l3-4h3l-3 4M10 7l3-4h3l-3 4M17 7l3-4"/>'),
@@ -1289,6 +1307,29 @@ function solFromLive(d){
 let camList=null,camBig=null,camTick=Date.now();
 async function loadCams(){try{camList=(await fetch("api/cameras").then(r=>r.json())).cameras||[];}catch(e){camList=[];}}
 function camTile(c,big){return `<button class="camt${big?" big":""}" data-cam="${esc(c.id)}"><img data-camimg="${esc(c.id)}" src="api/cam/${encodeURIComponent(c.id)}?t=${camTick}" alt="${esc(c.name)}" onerror="this.parentNode.classList.add('err')" onload="this.parentNode.classList.remove('err')"><span class="live">● مباشر</span><span class="ce">ما وصلت للكاميرا. تأكد من الـ IP والباسورد</span><span class="cl">${esc(c.name)}${c.room?" · "+esc(c.room):""}</span></button>`;}
+/* ---- audio: network amplifiers (DSPPA DW02xx and other LinkPlay / 4STREAM units) ---- */
+let audioZones=null;
+async function loadAudio(){try{audioZones=(await (await fetch("api/audio")).json()).zones||[];}catch(e){audioZones=[];}if(dashOn&&dpage==="audio")renderDash();}
+function audioCmd(id,cmd,value){const z=(audioZones||[]).find(x=>x.id===id);
+ if(z){if(cmd==="toggle")z.playing=!z.playing;if(cmd==="vol")z.vol=+value;if(cmd==="mute")z.mute=!!value;}
+ fetch("api/audio/cmd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,cmd,value})}).then(r=>r.json()).then(r=>{if(!r.ok)toast("ما وصل للأمبليفاير");}).catch(()=>toast("ما وصل للأمبليفاير"));}
+function dashAudio(){
+ if(audioZones===null){loadAudio();return `<div class="dempty">جاري التحميل…</div>`;}
+ if(!audioZones.length)return `<div class="dempty">ما اكو أمبليفايرات بعد. الفني يضيفها من الإعدادات ← الربط ← الصوت.</div>`;
+ return `<div class="azones">${audioZones.map(z=>{const on=z.online!==false;const what=z.title?esc(z.title)+(z.artist?" · "+esc(z.artist):""):(z.source?esc(z.source):on?"ما شغّال":"");
+  return `<div class="dcard azone${z.playing?" playing":""}" data-keep="1" style="min-height:0">
+  <div class="arow1"><div class="aart">${DI.music}</div><div style="flex:1;min-width:0"><b>${esc(z.name)}${z.room?` <span class="dmut" style="font-weight:400">· ${esc(z.room)}</span>`:""}</b>
+   <div class="dmut atitle">${on?what:"⚠️ ما يستجيب. تأكد إنه شغّال وعلى نفس الشبكة"}</div></div>
+   <span class="aeq${z.playing?" on":""}"><i></i><i></i><i></i><i></i></span></div>
+  <div class="arow2"><button class="dbtn" data-aprev="${esc(z.id)}" aria-label="السابق" ${on?"":"disabled"}>⏮</button>
+   <button class="dbtn p aplay" data-aplay="${esc(z.id)}" ${on?"":"disabled"}>${z.playing?"⏸ إيقاف":"▶ تشغيل"}</button>
+   <button class="dbtn" data-anext="${esc(z.id)}" aria-label="التالي" ${on?"":"disabled"}>⏭</button>
+   <button class="dbtn${z.mute?" p":""}" data-amute="${esc(z.id)}" ${on?"":"disabled"}>${z.mute?"🔇":"🔈"}</button></div>
+  <label class="avol"><span>الصوت</span><input type="range" min="0" max="100" value="${+z.vol||0}" data-avol="${esc(z.id)}" ${on?"":"disabled"}><span class="num">${+z.vol||0}</span></label>
+  <div class="asrc">${[["wifi","واي فاي"],["bt","بلوتوث"],["aux","AUX"]].map(([k,n])=>`<button class="dbtn" data-asrc="${esc(z.id)}|${k}" ${on?"":"disabled"}>${n}</button>`).join("")}</div>
+ </div>`;}).join("")}</div>
+ <p class="dmut" style="margin-top:10px;font-size:.8rem">الأغاني تختارها من Spotify أو تطبيق 4STREAM، وهنا تتحكم بكل أمبليفاير بالبيت.</p>`;
+}
 function dashCams(){
  if(camList===null){loadCams().then(()=>{if(dpage==="cams")renderDash();});return `<div class="dempty">جاري التحميل…</div>`;}
  if(!camList.length)return `<div class="dempty">ما اكو كاميرات بعد. الفني يضيفها من الإعدادات ← الربط.</div>`;
@@ -1300,16 +1341,18 @@ setInterval(()=>{if(!dashOn||dpage!=="cams"||document.hidden)return;camTick=Date
  document.querySelectorAll("img[data-camimg]").forEach(img=>{const n=new Image();n.onload=()=>{img.src=n.src;img.parentNode.classList.remove("err");};n.onerror=()=>img.parentNode.classList.add("err");n.src="api/cam/"+encodeURIComponent(img.dataset.camimg)+"?t="+camTick;});},1500);
 // installer: Solis keys + cameras (passwords stay on the tablet)
 let integ=null,integMsg="";
-async function loadInteg(){try{const r=await fetch("api/integrations");integ=r.ok?await r.json():null;}catch(e){integ=null;}if(integ){integ.cameras=integ.cameras||[];}if(dpage==="settings")renderDash();}
+async function loadInteg(){try{const r=await fetch("api/integrations");integ=r.ok?await r.json():null;}catch(e){integ=null;}if(integ){integ.cameras=integ.cameras||[];integ.audio=integ.audio||[];}if(dpage==="settings")renderDash();}
 function readInteg(){if(!integ)return;const g=(sel)=>{const e=document.querySelector(sel);return e?e.value.trim():"";};
  integ.solis=Object.assign({},integ.solis,{key_id:g("[data-sk=id]"),secret:g("[data-sk=secret]")});
  integ.ai=Object.assign({},integ.ai,{key:g("[data-sk=ai]")});
+ integ.audio=[...document.querySelectorAll("[data-audrow]")].map(row=>{const o={id:row.dataset.audrow};row.querySelectorAll("[data-af]").forEach(i=>o[i.dataset.af]=i.value.trim());return o;});
  integ.cameras=[...document.querySelectorAll("[data-camrow]")].map(row=>{const o={};row.querySelectorAll("[data-cf]").forEach(i=>o[i.dataset.cf]=i.value.trim());o.id=row.dataset.camrow;o.has_password=row.dataset.haspw==="1";return o;});}
 async function saveInteg(){readInteg();integMsg="جاري الحفظ…";
- const body={ai_key:(integ.ai||{}).del?"-":((integ.ai||{}).key||""),solis:{key_id:integ.solis.key_id,secret:integ.solis.secret},cameras:integ.cameras.map(c=>({id:c.id,name:c.name,room:c.room,brand:c.brand,host:c.host,port:c.port,channel:c.channel,user:c.user,password:c.password||"",url:c.url}))};
+ const body={ai_key:(integ.ai||{}).del?"-":((integ.ai||{}).key||""),solis:{key_id:integ.solis.key_id,secret:integ.solis.secret},cameras:integ.cameras.map(c=>({id:c.id,name:c.name,room:c.room,brand:c.brand,host:c.host,port:c.port,channel:c.channel,user:c.user,password:c.password||"",url:c.url})),audio:(integ.audio||[]).map(a=>({id:a.id,name:a.name,room:a.room,ip:a.ip}))};
  try{const r=await fetch("api/integrations",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!r.ok)throw 0;toast("انحفظ");integMsg="";camList=null;await loadInteg();setTimeout(()=>{loadInteg();loadSolar();},4000);}
  catch(e){integMsg="ما انحفظ";renderDash();}}
-let integLoading=false,camFound=null;
+let integLoading=false,camFound=null,audFound=null;
+async function findAudio(){readInteg();audFound="busy";renderDash();try{const r=await fetch("api/discover/audio").then(r=>r.json());audFound=r.found||[];}catch(e){audFound=[];}renderDash();}
 async function findCams(){readInteg();camFound="busy";renderDash();try{const r=await fetch("api/discover/cams").then(r=>r.json());camFound=r.found||[];}catch(e){camFound=[];}renderDash();}
 function integHtml(){
  if(!integ&&!integLoading){integLoading=true;loadInteg().finally(()=>{integLoading=false;});}
@@ -1344,6 +1387,16 @@ function integHtml(){
    ${c.id?`<img class="prev" src="api/cam/${encodeURIComponent(c.id)}?t=${Date.now()}" alt="" onerror="this.style.opacity=.2">`:`<span class="st">احفظ حتى تشوف الصورة</span>`}
    <button class="dbtn" data-delcam="${i}">حذف</button></div>`).join("")||`<span class="dmut">ما اكو كاميرات.</span>`}
   <datalist id="roomList">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist>
+ </div>
+ <div class="dcard integ" data-keep="1" style="min-height:0;margin-top:12px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>الصوت (أمبليفايرات الشبكة)</b><span style="display:flex;gap:8px"><button class="dbtn p" data-findaud="1" ${audFound==="busy"?"disabled":""}>${audFound==="busy"?"جاري البحث بالشبكة…":"🔍 ابحث عن الأمبليفايرات"}</button><button class="dbtn" data-addaudm="1">+ يدوي</button></span></div>
+  <p class="dmut" style="margin:4px 0 8px;font-size:.78rem">DSPPA DW02xx وأي أمبليفاير يشتغل بتطبيق 4STREAM (LinkPlay). لازم يكون على نفس شبكة التابليت.</p>
+  ${Array.isArray(audFound)?(audFound.length?`<div class="found">${audFound.map((f,i)=>`<div class="fr"><span class="fi">♪</span><div style="flex:1;min-width:0"><b dir="ltr">${esc(f.ip)}</b><div class="dmut" style="font-size:.75rem">${esc([f.name,f.model].filter(Boolean).join(" · ")||"أمبليفاير")}</div></div>${f.known?`<span class="dmut" style="font-size:.75rem">مضاف</span>`:`<button class="dbtn p" data-addaud="${i}">إضافة</button>`}</div>`).join("")}</div>`:`<p class="dmut" style="font-size:.8rem">ما لكيت أمبليفايرات. تأكد إنها شغّالة ومربوطة بالشبكة، أو ضيفها يدوي بالـ IP.</p>`):""}
+  ${integ.audio.map((a,i)=>`<div class="irow" data-audrow="${esc(a.id||"")}">
+   <label>الاسم<input class="setin" data-af="name" value="${esc(a.name)}"></label>
+   <label>الغرفة<input class="setin" data-af="room" value="${esc(a.room)}" list="roomList"></label>
+   <label>IP<input class="setin" data-af="ip" value="${esc(a.ip)}" dir="ltr" placeholder="192.168.1.80"></label>
+   <button class="dbtn" data-delaud="${i}">حذف</button></div>`).join("")||`<span class="dmut">ما اكو أمبليفايرات.</span>`}
  </div>
  <div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="dbtn p" data-saveinteg="1">حفظ الربط</button><span class="dmut">${esc(integMsg)}</span></div>`;
 }
@@ -1525,7 +1578,7 @@ function autoChange(t){if(t.id==="aRad"){auto.home.radius=+t.value;saveAuto();re
   sh("#rVw",["solar_export","battery_low","battery_full","temp_above","temp_below"].includes(ty));sh("#rDw",["temp_above","temp_below","ga_on","ga_off"].includes(ty));sh("#rWw",ty==="arrive"||ty==="leave");
   const ds=$("#rD");if(ds)[...ds.options].forEach(o=>{if(!o.dataset.k)return;o.hidden=ty.startsWith("temp")?o.dataset.k!=="t":o.dataset.k!=="b";});return true;}
  return false;}
-const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["scenes","المشاهد","scenes"],["ai","مصمم المشاهد","ai"],["auto","الأتمتة","bolt"],["map","الخريطة","map"],["maint","الصيانة","tool"],["settings","الإعدادات","gear"]];
+const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["audio","الصوت","music"],["scenes","المشاهد","scenes"],["ai","مصمم المشاهد","ai"],["auto","الأتمتة","bolt"],["map","الخريطة","map"],["maint","الصيانة","tool"],["settings","الإعدادات","gear"]];
 function renderDash(){
  const el=$("#dash");if(!el)return;el.hidden=!dashOn;$("#dashBack").hidden=dashOn;if(!dashOn)return;
  const a=document.activeElement;if(a&&el.contains(a)&&(a.type==="range"||a.tagName==="TEXTAREA")&&dpage!=="ai")return;
@@ -1533,9 +1586,9 @@ function renderDash(){
  if(lastDpage==="maint"&&role.installer&&document.querySelector("[data-gn]"))mntCapture();
  const draft=$("#chatIn")?$("#chatIn").value:"";
  const p=P(),now=new Date();const hr=now.getHours();const greet=hr<12?"صباح الخير":hr<18?"أهلاً":"مساء الخير";
- const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",scenes:"المشاهد",ai:"مصمم المشاهد",auto:"الأتمتة",maint:"الصيانة"};
+ const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",audio:"الصوت",scenes:"المشاهد",ai:"مصمم المشاهد",auto:"الأتمتة",maint:"الصيانة"};
  const body={home:dashHome,rooms:dashRooms,room:dashRoom,light:()=>grouped(p.devices.filter(isLight))+(p.devices.some(isPlug)?`<div class="dsec">مفاتيح وقواطع ذكية</div>`+tilesHtml(p.devices.filter(isPlug)):""),
-  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,cams:dashCams,scenes:dashScenes,ai:dashChat,auto:dashAuto,maint:dashMaint,settings:dashSettings}[dpage]||dashHome;
+  ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,cams:dashCams,audio:dashAudio,scenes:dashScenes,ai:dashChat,auto:dashAuto,maint:dashMaint,settings:dashSettings}[dpage]||dashHome;
  const lightsOn=p.devices.filter(d=>isLight(d)&&d.st.on).length;
  const br=p.brand||{};
  el.innerHTML=`<nav class="dside"><div class="dbrand">${br.logo?`<img src="${br.logo}" alt="" style="height:34px;max-width:60px;object-fit:contain">`:DI.home}<span>${esc(br.name||p.name||"البيت")}</span></div>
@@ -1578,6 +1631,15 @@ function dashClick(e){
  if(b=q("[data-roomoff2]")){P().devices.filter(d=>d.room===b.dataset.roomoff2&&d.st.on&&d.type!=="scene").forEach(d=>devSet(d,false));refresh();renderDash();return;}
  if(b=q("[data-cam]")){camBig=camBig===b.dataset.cam?null:b.dataset.cam;renderDash();return;}
  if(b=q("[data-findcam]")){findCams();return;}
+ if(b=q("[data-aplay]")){audioCmd(b.dataset.aplay,"toggle");renderDash();return;}
+ if(b=q("[data-anext]")){audioCmd(b.dataset.anext,"next");return;}
+ if(b=q("[data-aprev]")){audioCmd(b.dataset.aprev,"prev");return;}
+ if(b=q("[data-amute]")){const z=audioZones.find(x=>x.id===b.dataset.amute);audioCmd(z.id,"mute",z.mute?0:1);renderDash();return;}
+ if(b=q("[data-asrc]")){const [id,k]=b.dataset.asrc.split("|");audioCmd(id,"src",k);toast("تحوّل المصدر");return;}
+ if(b=q("[data-findaud]")){findAudio();return;}
+ if(b=q("[data-addaud]")){readInteg();const f=audFound[+b.dataset.addaud];integ.audio.push({id:"",name:f.name||"سماعات "+(integ.audio.length+1),room:"",ip:f.ip});f.known=true;toast("انضاف. اختار الغرفة واحفظ");renderDash();return;}
+ if(b=q("[data-addaudm]")){readInteg();integ.audio.push({id:"",name:"سماعات "+(integ.audio.length+1),room:"",ip:""});renderDash();return;}
+ if(b=q("[data-delaud]")){readInteg();integ.audio.splice(+b.dataset.delaud,1);renderDash();return;}
  if(b=q("[data-aidel]")){readInteg();integ.ai=Object.assign({},integ.ai,{del:true,key:""});saveInteg();return;}
  if(b=q("[data-addfound]")){readInteg();const f=camFound[+b.dataset.addfound];const n=Math.max(1,Math.min(64,+(document.querySelector(`[data-fch="${b.dataset.addfound}"]`)||{}).value||1));
   for(let c=1;c<=n;c++)integ.cameras.push({id:"",name:(f.name&&n===1?f.name:"كاميرا "+(integ.cameras.length+1)),room:"",brand:f.brand,host:f.ip,port:"80",channel:String(c),user:"admin",url:""});
@@ -1593,6 +1655,7 @@ function dashClick(e){
 }
 function dashChange(e){
  const t=e.target;
+ if(t.dataset&&t.dataset.avol){audioCmd(t.dataset.avol,"vol",+t.value);return;}
  if(dpage==="auto"&&autoChange(t))return;
  if(dpage==="home"&&homeChange(t))return;
  if(t.dataset.timp!=null&&t.files&&t.files[0]){t.files[0].text().then(txt=>{let j;try{j=JSON.parse(txt);}catch(e){toast("الملف مو قالب");return;}if(!j.tat_template||!Array.isArray(j.devices)){toast("الملف مو قالب TAT");return;}
@@ -1605,7 +1668,7 @@ function dashChange(e){
  if(t.dataset.ps){const d=P().devices.find(x=>x.id===t.dataset.ps);devLevel(d,+t.value);refresh();t.blur();renderDash();}
  if(t.dataset.photo&&t.files[0]){photoFor(t.dataset.photo,t.files[0]);}
 }
-function dashInput(e){const t=e.target;if(dpage==="auto"&&autoInput(t))return;if(t.id==="mntQ"){mntFilter=t.value.trim();document.querySelectorAll("[data-mrow]").forEach(r=>r.hidden=!!mntFilter&&!r.dataset.q.includes(mntFilter));return;}if(t.dataset.lv||t.dataset.ps){const s=t.parentElement.querySelector("span");if(s)s.textContent=t.value+"%";}}
+function dashInput(e){const t=e.target;if(t.dataset&&t.dataset.avol){const s=t.parentElement.querySelector(".num");if(s)s.textContent=t.value;return;}if(dpage==="auto"&&autoInput(t))return;if(t.id==="mntQ"){mntFilter=t.value.trim();document.querySelectorAll("[data-mrow]").forEach(r=>r.hidden=!!mntFilter&&!r.dataset.q.includes(mntFilter));return;}if(t.dataset.lv||t.dataset.ps){const s=t.parentElement.querySelector("span");if(s)s.textContent=t.value+"%";}}
 
 /* ---------- schedules (run by the bridge, also when no page is open) ---------- */
 let schedules=null,holiday={enabled:false,devices:[]},sunT={};

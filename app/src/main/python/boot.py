@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-MODS = ("knx_bridge", "assistant", "tuya_cloud", "solis_cloud")
+MODS = ("knx_bridge", "assistant", "tuya_cloud", "solis_cloud", "audio_linkplay")
 
 
 def _paths():
@@ -66,8 +66,10 @@ def run() -> None:
             for f in keep.iterdir():
                 shutil.copyfile(f, web / f.name)
         os.environ["KNX_WEB_VER"] = str(bundled_ver())
-    for m in MODS:
-        sys.modules.pop(m, None)
+    for m in list(sys.modules):  # forget our modules (also new ones an online update added)
+        f = getattr(sys.modules.get(m), "__file__", "") or ""
+        if m in MODS or f.startswith(str(ota)):
+            sys.modules.pop(m, None)
     started = time.time()
     try:
         import knx_bridge  # noqa: PLC0415

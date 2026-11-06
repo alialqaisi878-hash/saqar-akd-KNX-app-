@@ -67,7 +67,8 @@ jobs:
           # online update bundle for KNX Prog (no reinstall): page + Python, sha256 in the manifest
           mkdir -p /tmp/out/web
           cp app/src/main/assets/index.html app/src/main/python/knx_bridge.py app/src/main/python/assistant.py \
-             app/src/main/python/tuya_cloud.py app/src/main/python/solis_cloud.py /tmp/out/web/
+             app/src/main/python/tuya_cloud.py app/src/main/python/solis_cloud.py \\
+             app/src/main/python/audio_linkplay.py /tmp/out/web/
           MIN=$(python3 -c "import json;print(json.load(open('ota.json'))['min_app'])")
           python3 - "$MIN" "${{ github.run_number }}" <<'PY'
           import hashlib, json, os, sys

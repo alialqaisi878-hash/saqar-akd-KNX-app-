@@ -38,6 +38,10 @@ try:
     import assistant
 except ImportError:
     assistant = None
+try:
+    import audio_linkplay
+except ImportError:  # file missing next to the bridge
+    audio_linkplay = None
 
 import time
 if hasattr(time, "tzset"):
@@ -213,7 +217,8 @@ async def get_integrations(req):
     k = str(INTEG.get("ai_key") or AI_KEY or "")
     return web.json_response({"ai": {"has_key": bool(k), "kind": "gemini" if k.startswith("AIza") else ("claude" if k else "")},
                               "solis": {"key_id": sc.get("key_id", ""), "has_secret": bool(sc.get("secret"))},
-                              "cameras": cams, "solar_state": solar_state})
+                              "cameras": cams, "solar_state": solar_state,
+                              "audio": [{k: a.get(k, "") for k in ("id", "name", "room", "ip")} for a in INTEG.get("audio", [])]})
 
 
 async def put_integrations(req):
@@ -244,6 +249,13 @@ async def put_integrations(req):
                          "channel": str(c.get("channel", "1")).strip() or "1", "user": str(c.get("user", "")).strip(),
                          "password": pw, "url": str(c.get("url", "")).strip()})
         new["cameras"] = cams
+    if isinstance(data.get("audio"), list):
+        amps = []
+        for a in data["audio"][:32]:
+            if isinstance(a, dict) and str(a.get("ip", "")).strip():
+                amps.append({"id": str(a.get("id") or new_id()), "name": str(a.get("name", ""))[:40] or "سماعات",
+                             "room": str(a.get("room", ""))[:40], "ip": str(a.get("ip", "")).strip()[:64]})
+        new["audio"] = amps
     if "ai_key" in data:
         k = str(data.get("ai_key") or "").strip()
         if k == "-":
@@ -258,6 +270,8 @@ async def put_integrations(req):
         if solar_kick is not None:
             solar_kick.set()
     broadcast({"t": "cameras"})
+    if "audio" in data and audio_kick is not None:
+        audio_kick.set()
     return web.json_response({"ok": True})
 
 
@@ -418,6 +432,97 @@ async def port_open(ip: str, port: int = 80, t: float = 0.5) -> bool:
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+# ---------------------------------------------------------------- audio (LinkPlay amplifiers on the LAN)
+# The installer lists the amplifiers (IP, name, room) in settings; they live in integrations.json.
+audio_status: dict[str, dict] = {}   # amp id -> last status
+audio_kick: asyncio.Event | None = None
+audio_sess = None
+
+
+def audio_amps() -> list[dict]:
+    return [a for a in INTEG.get("audio", []) if isinstance(a, dict) and a.get("ip")]
+
+
+def audio_public() -> list[dict]:
+    return [{"id": a["id"], "name": a.get("name", ""), "room": a.get("room", ""),
+             **(audio_status.get(a["id"]) or {"online": False})} for a in audio_amps()]
+
+
+async def audio_loop() -> None:
+    global audio_kick, audio_sess
+    audio_kick = asyncio.Event()
+    import aiohttp
+    audio_sess = aiohttp.ClientSession()
+    last = ""
+    while True:
+        amps = audio_amps()
+        if amps and audio_linkplay is not None:
+            async def one(a):
+                try:
+                    audio_status[a["id"]] = await audio_linkplay.status(audio_sess, a["ip"])
+                except Exception:  # noqa: BLE001
+                    audio_status[a["id"]] = {"online": False}
+            await asyncio.gather(*(one(a) for a in amps))
+            pub = audio_public()
+            sig = json.dumps(pub, sort_keys=True, ensure_ascii=False)
+            if sig != last:
+                last = sig
+                broadcast({"t": "audio", "zones": pub})
+        try:
+            await asyncio.wait_for(audio_kick.wait(), 3 if clients else 30)
+        except asyncio.TimeoutError:
+            pass
+        audio_kick.clear()
+
+
+async def audio_do(aid: str, cmd: str, value=None) -> None:
+    amp = next((a for a in audio_amps() if a["id"] == aid), None)
+    if amp is None or audio_linkplay is None or audio_sess is None:
+        raise ValueError("no such amplifier")
+    await audio_linkplay.control(audio_sess, amp["ip"], cmd, value)
+    if audio_kick is not None:
+        audio_kick.set()
+
+
+async def get_audio(_req):
+    return web.json_response({"zones": audio_public()})
+
+
+async def audio_cmd(req):
+    try:
+        d = await req.json()
+        await audio_do(str(d.get("id", "")), str(d.get("cmd", "")), d.get("value"))
+        return web.json_response({"ok": True})
+    except Exception as err:  # noqa: BLE001
+        return web.json_response({"ok": False, "error": str(err)[:200]}, status=400)
+
+
+async def discover_audio(req):
+    if not is_installer(req):
+        return web.json_response({"ok": False}, status=403)
+    if audio_linkplay is None:
+        return web.json_response({"ok": True, "found": []})
+    import ipaddress
+    hosts: list[str] = []
+    for ip in local_ips():
+        if ip.startswith("127."):
+            continue
+        net = ipaddress.ip_network(ip + "/24", strict=False)
+        hosts += [str(h) for h in net.hosts() if str(h) != ip]
+    sem = asyncio.Semaphore(64)
+
+    async def check(h):
+        async with sem:
+            return h if (await port_open(h, 80, 0.4) or await port_open(h, 443, 0.4)) else None
+
+    web_hosts = [h for h in await asyncio.gather(*(check(h) for h in hosts)) if h]
+    found = await audio_linkplay.discover(web_hosts)
+    known = {a.get("ip") for a in audio_amps()}
+    for f in found:
+        f["known"] = f["ip"] in known
+    return web.json_response({"ok": True, "found": found})
 
 
 async def discover_cams(req):
@@ -842,6 +947,17 @@ def save_db(db: dict) -> None:
 async def run_scene_actions(scene: dict) -> int:
     n = 0
     for a in scene.get("actions", []):
+        if a.get("audio"):  # {"audio": amp id, "cmd": play|pause|vol|src, "value": ...}
+            try:
+                if a.get("vol") is not None:
+                    await audio_do(a["audio"], "vol", a["vol"])
+                if a.get("src"):
+                    await audio_do(a["audio"], "src", a["src"])
+                await audio_do(a["audio"], "play" if a.get("on", True) else "pause")
+                n += 1
+            except Exception as err:  # noqa: BLE001
+                log.warning("scene %s: audio %s", scene.get("name"), err)
+            continue
         d = find_device(a.get("id", ""))
         if d is None:
             continue
@@ -1843,6 +1959,9 @@ async def main() -> None:
         web.get("/api/cam/{cid}", cam_snapshot),
         web.get("/api/integrations", get_integrations),
         web.get("/api/discover/cams", discover_cams),
+        web.get("/api/discover/audio", discover_audio),
+        web.get("/api/audio", get_audio),
+        web.post("/api/audio/cmd", audio_cmd),
         web.put("/api/integrations", put_integrations),
         web.get("/tat-{n:(180|192|512)}.png", app_icon),
         web.put("/api/schedules", put_schedules),
@@ -1882,6 +2001,7 @@ async def main() -> None:
         asyncio.create_task(tuya_loop())
     make_solis()
     asyncio.create_task(solar_loop())
+    asyncio.create_task(audio_loop())
     if (CFG.get("relay_url") or "").strip() and (CFG.get("house_id") or "").strip():
         if not REMOTE_PW:
             log.warning("Set remote_password in config.json, otherwise the fixed link refuses everyone.")
