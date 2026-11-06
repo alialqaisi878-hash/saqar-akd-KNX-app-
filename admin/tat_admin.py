@@ -8,8 +8,12 @@
 Runs a small page on http://127.0.0.1:3710 and opens it in the browser. Only this PC can reach it.
 Standard library only (no installs), packed as TATAdmin.exe by GitHub Actions.
 """
+import base64
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import shutil
 import sqlite3
 import sys
@@ -24,8 +28,71 @@ from pathlib import Path
 PORT = 3710
 GH = "https://raw.githubusercontent.com/alialqaisi878-hash/saqar-akd-KNX-app-/apk/"
 HERE = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-DB_FILE = Path(os.environ.get("TAT_ADMIN_DB") or HERE / "TATAdmin.db")
+
+
+def data_dir() -> Path:
+    """The database lives apart from the program: TATAdmin-data next to the exe, or the folder written
+    in data-folder.txt next to the exe (another drive, an encrypted USB...)."""
+    if os.environ.get("TAT_ADMIN_DATA"):
+        return Path(os.environ["TAT_ADMIN_DATA"])
+    ptr = HERE / "data-folder.txt"
+    try:
+        p = ptr.read_text(encoding="utf-8-sig").strip().strip('"')
+        if p:
+            return Path(p)
+    except OSError:
+        pass
+    return HERE / "TATAdmin-data"
+
+
+DATA = data_dir()
+DATA.mkdir(parents=True, exist_ok=True)
+DB_FILE = Path(os.environ.get("TAT_ADMIN_DB") or DATA / "TATAdmin.db")
 lock = threading.Lock()
+SESSION = secrets.token_hex(24)  # cookie for this run; the page asks for the program password first
+
+
+# ---------------------------------------------------------------- secrets on this PC
+def _dpapi(data: bytes, protect: bool) -> bytes:
+    """Windows DPAPI: only this Windows user on this PC can open it (a copied database is useless)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class BLOB(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+    buf = ctypes.create_string_buffer(data, len(data))
+    src, out = BLOB(len(data), buf), BLOB()
+    fn = ctypes.windll.crypt32.CryptProtectData if protect else ctypes.windll.crypt32.CryptUnprotectData
+    if not fn(ctypes.byref(src), None, None, None, None, 0x1, ctypes.byref(out)):
+        raise OSError("DPAPI failed")
+    try:
+        return ctypes.string_at(out.pbData, out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(out.pbData)
+
+
+def seal(text: str) -> str:
+    if os.name == "nt":
+        try:
+            return "dp:" + base64.b64encode(_dpapi(text.encode(), True)).decode()
+        except Exception:  # noqa: BLE001
+            pass
+    return "b64:" + base64.b64encode(text.encode()).decode()  # test runs on Linux only
+
+
+def unseal(v: str) -> str:
+    try:
+        if v.startswith("dp:"):
+            return _dpapi(base64.b64decode(v[3:]), False).decode()
+        if v.startswith("b64:"):
+            return base64.b64decode(v[4:]).decode()
+    except Exception:  # noqa: BLE001
+        return ""  # database copied from another PC/user: type the password again
+    return v
+
+
+def pw_hash(pw: str, salt: bytes) -> str:
+    return hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, 200_000).hex()
 
 
 def db() -> sqlite3.Connection:
@@ -68,7 +135,7 @@ def remote(path: str, body=None, method=None):
     """Call the company server's admin API with the dashboard password."""
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(server() + path, data=data, method=method or ("POST" if data else "GET"),
-                                 headers={"X-Admin": setting("password"), "Content-Type": "application/json",
+                                 headers={"X-Admin": unseal(setting("password")), "Content-Type": "application/json",
                                           "User-Agent": "TATAdmin"})
     with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read().decode("utf-8"))
@@ -91,6 +158,45 @@ def err_text(e: Exception) -> str:
 
 
 # ---------------------------------------------------------------- API used by the page
+fails = {"n": 0, "until": 0.0}
+
+
+def lock_api(method: str, path: str, body: dict, authed: bool):
+    """Program password: set on first run, asked every time the program opens. Returns (reply, set_cookie)."""
+    has = bool(setting("lock_hash"))
+    if path == "/api/lock":
+        return {"set": has, "authed": authed}, False
+    if path == "/api/lock/setup" and method == "POST" and not has:
+        pw = str(body.get("pw", ""))
+        if len(pw) < 6:
+            return {"ok": False, "error": "كلمة السر لازم 6 حروف أو أكثر"}, False
+        salt = secrets.token_bytes(16)
+        set_setting("lock_salt", salt.hex())
+        set_setting("lock_hash", pw_hash(pw, salt))
+        return {"ok": True}, True
+    if path == "/api/lock/login" and method == "POST" and has:
+        if time.time() < fails["until"]:
+            return {"ok": False, "error": "انتظر دقيقة وجرب"}, False
+        ok = hmac.compare_digest(pw_hash(str(body.get("pw", "")), bytes.fromhex(setting("lock_salt"))), setting("lock_hash"))
+        if not ok:
+            fails["n"] += 1
+            if fails["n"] >= 5:
+                fails.update(n=0, until=time.time() + 60)
+            time.sleep(1)
+            return {"ok": False, "error": "كلمة السر غلط"}, False
+        fails["n"] = 0
+        return {"ok": True}, True
+    if path == "/api/lock/change" and method == "POST" and authed:
+        pw = str(body.get("pw", ""))
+        if len(pw) < 6:
+            return {"ok": False, "error": "كلمة السر لازم 6 حروف أو أكثر"}, False
+        salt = secrets.token_bytes(16)
+        set_setting("lock_salt", salt.hex())
+        set_setting("lock_hash", pw_hash(pw, salt))
+        return {"ok": True}, False
+    return None, False
+
+
 def api(method: str, path: str, body: dict):
     if path == "/api/houses":
         rows = {r["house"]: dict(r) for r in CON.execute("SELECT * FROM customers")}
@@ -160,13 +266,13 @@ def api(method: str, path: str, body: dict):
             if body.get("server"):
                 set_setting("server", str(body["server"]).strip())
             if body.get("password"):
-                set_setting("password", str(body["password"]).strip())
+                set_setting("password", seal(str(body["password"]).strip()))
         try:
             remote("/admin/api/houses")
             ok = ""
         except Exception as e:  # noqa: BLE001
             ok = err_text(e)
-        return {"server": server(), "has_password": bool(setting("password")), "check": ok, "db": str(DB_FILE)}
+        return {"server": server(), "has_password": bool(unseal(setting("password"))), "check": ok, "db": str(DB_FILE)}
     if path == "/api/backup" and method == "POST":
         dest = Path.home() / "Documents" / "TATAdmin-backup"
         dest.mkdir(parents=True, exist_ok=True)
@@ -184,9 +290,11 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quiet
         pass
 
-    def _send(self, code: int, body: bytes, ctype: str):
+    def _send(self, code: int, body: bytes, ctype: str, cookie: str | None = None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
@@ -204,13 +312,20 @@ class H(BaseHTTPRequestHandler):
         if method == "POST":
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
+        authed = f"tatadm={SESSION}" in (self.headers.get("Cookie") or "")
+        cookie = False
         try:
-            r = api(method, path, body)
+            r, cookie = lock_api(method, path, body, authed)
+            if r is None:
+                if not authed:
+                    return self._send(401, b'{"error":"locked"}', "application/json")
+                r = api(method, path, body)
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "error": str(e)[:200]}
         if r is None:
             return self._send(404, b"{}", "application/json")
-        self._send(200, json.dumps(r, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+        self._send(200, json.dumps(r, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8",
+                   f"tatadm={SESSION}; HttpOnly; SameSite=Strict; Path=/" if cookie else None)
 
     def do_GET(self):
         self._handle("GET")
@@ -310,10 +425,21 @@ async function settings(){const s=await get("api/settings");
  <label>كلمة سر لوحة الشركة (admin_password.txt على السيرفر)</label><input id="sp" type="password" placeholder="${s.has_password?"محفوظة، اكتب جديدة حتى تغيرها":"اكتبها هنا"}">
  <div class="row" style="margin-top:12px"><button class="b" id="sv">حفظ وفحص</button><span class="mut">${s.check?`<span style="color:var(--bad)">${esc(s.check)}</span>`:'<span style="color:var(--ok)">✓ مربوط بالسيرفر</span>'}</span></div></div>
  <div class="card"><b>قاعدة البيانات</b><div class="mut ft" style="margin:6px 0">${esc(s.db)}</div><div class="mut">كل معلومات الزبائن بهذا الملف على حاسبتك. خذ نسخة احتياطية كل فترة.</div>
- <div class="row" style="margin-top:10px"><button class="g" id="bk">💾 نسخة احتياطية (Documents)</button></div></div>`;
+ <div class="row" style="margin-top:10px"><button class="g" id="bk">💾 نسخة احتياطية (Documents)</button></div>
+ <div class="mut" style="margin-top:10px">تريد القاعدة بمكان ثاني (درايف ثاني أو فلاشة)؟ انقل مجلد TATAdmin-data، واكتب مساره الجديد بملف data-folder.txt يم البرنامج.</div></div>
+ <div class="card"><b>كلمة سر البرنامج</b><div class="row" style="margin-top:8px"><input id="cp" type="password" placeholder="كلمة سر جديدة" style="max-width:260px"><button class="g" id="cb">غيّر</button></div></div>`;
+ $("#cb").onclick=async()=>{const r=await post("api/lock/change",{pw:$("#cp").value});toast(r.ok?"تغيرت ✓":r.error);};
  $("#sv").onclick=async()=>{const x=await post("api/settings",{server:$("#ss").value,password:$("#sp").value});server=x.server;toast(x.check||"✓ مربوط");settings();};
  $("#bk").onclick=async()=>{const x=await post("api/backup",{});toast(x.ok?"انحفظت: "+x.file:"ما انحفظت");};}
-let server="";get("api/settings").then(s=>{server=s.server;$("#srv").textContent=s.server.replace(/^https?:\/\//,"");if(!s.has_password){page="set";}go();});
+let server="";
+function start(){get("api/settings").then(s=>{server=s.server;$("#srv").textContent=s.server.replace(/^https?:\/\//,"");if(!s.has_password){page="set";}go();});}
+async function lockScreen(){const l=await get("api/lock");if(l.authed){start();return;}$("#nav").innerHTML="";
+ $("#m").innerHTML=`<div class="card" style="max-width:380px;margin:12vh auto"><h2>🔒 TAT Admin</h2><div class="mut">${l.set?"اكتب كلمة سر البرنامج":"أول مرة: اختار كلمة سر للبرنامج (6 حروف أو أكثر). تنطلب كل ما تفتحه."}</div>
+ <input id="lp" type="password" style="margin-top:12px" autofocus>${l.set?"":`<input id="lp2" type="password" placeholder="عيدها" style="margin-top:8px">`}
+ <div class="row" style="margin-top:12px"><button class="b" id="lb">${l.set?"دخول":"حفظ ودخول"}</button><span id="le" style="color:var(--bad)"></span></div></div>`;
+ const go2=async()=>{const pw=$("#lp").value;if(!l.set&&pw!==$("#lp2").value){$("#le").textContent="ما متطابقة";return;}const r=await post(l.set?"api/lock/login":"api/lock/setup",{pw});if(!r.ok){$("#le").textContent=r.error;return;}start();};
+ $("#lb").onclick=go2;$("#m").onkeydown=e=>{if(e.key==="Enter")go2();};}
+lockScreen();
 </script></body></html>"""
 
 
