@@ -1342,14 +1342,22 @@ let audioZones=null,music=null,libTab="radio",libTarget="all",stAdd=false;
 async function loadMusic(){try{music=await (await fetch("api/music")).json();}catch(e){music={songs:[],stations:[]};}if(dashOn&&dpage==="audio")renderDash();}
 function targets(){const z=audioZones||[];return libTarget==="all"?z.filter(x=>x.online!==false):z.filter(x=>x.id===libTarget);}
 function playOn(cmd,value,label){const t=targets();if(!t.length){toast("اختار أمبليفاير شغّال");return;}t.forEach(z=>{z.playing=true;z.title=label||z.title;z.artist="";audioCmd(z.id,cmd,value);});toast("▶ "+(label||"")+" · "+(libTarget==="all"?"بكل البيت":t[0].name));renderDash();}
-async function uploadSongs(files){if(!files||!files.length)return;const fd=new FormData();[...files].forEach(f=>fd.append("file",f,f.name));toast("جاري رفع "+files.length+" ملف…");
- try{const r=await (await fetch("api/music",{method:"POST",body:fd})).json();if(!r.ok)throw r.error;music.songs=r.songs;toast("انضافت "+r.added+" أغنية");}catch(e){toast(typeof e==="string"?e:"ما انرفعت");}renderDash();}
+let upProg="";
+async function uploadSongs(files){if(!files||!files.length)return;files=[...files];let added=0;const CH=1536*1024;
+ for(let k=0;k<files.length;k++){const f=files[k];const n=Math.max(1,Math.ceil(f.size/CH));const up=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  try{for(let i=0;i<n;i++){upProg=`⬆ ${k+1}/${files.length} · ${f.name.slice(0,30)} · ${Math.round(i*100/n)}%`;renderUp();let r,tries=0;
+    while(true){try{r=await (await fetch(`api/music/part?up=${up}&i=${i}&n=${n}&name=${encodeURIComponent(f.name)}`,{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:f.slice(i*CH,(i+1)*CH)})).json();break;}catch(e){if(++tries>3)throw "انقطع النت";await new Promise(z=>setTimeout(z,1500*tries));}}
+    if(!r.ok)throw r.error;if(r.songs){music.songs=r.songs;added++;}}}
+  catch(e){toast(f.name+": "+(typeof e==="string"?e:"ما انرفعت"));}}
+ upProg="";toast("انضافت "+added+" أغنية");renderDash();}
+function renderUp(){const el=document.querySelector("[data-upprog]");if(el){el.textContent=upProg;el.style.display=upProg?"":"none";}}
 function libHtml(){
  if(music===null){loadMusic();return `<div class="dcard" style="min-height:0;margin-top:14px"><span class="dmut">جاري تحميل المكتبة…</span></div>`;}
  const z=audioZones||[];
  const tabs=[["radio","📻 إذاعات وأغاني"],["songs","🎵 أغاني البيت"],["presets","🟢 Spotify"]];
  let body="";
  if(libTab==="songs")body=`<label class="dbtn p" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">⬆ ضيف أغاني من التلفون<input type="file" accept="audio/*,.mp3,.m4a,.aac,.flac,.wav,.ogg" multiple data-upsong hidden></label>
+  <p class="dmut" style="font-size:.78rem;margin:6px 0 0">من أي تلفون بالبيت، أندرويد أو آيفون، حتى من برا البيت. الأغنية تنحفظ على تابلت البيت وتشتغل للكل.</p><div class="dmut" data-upprog style="font-size:.82rem;margin-top:6px;${upProg?"":"display:none"}">${esc(upProg)}</div>
   <div class="slist">${music.songs.map(m=>`<div class="srow"><button class="splay" data-psong="${esc(m.file)}" aria-label="شغّل">▶</button><span class="sname">${esc(m.name)}</span><span class="dmut num" style="font-size:.75rem">${(m.size/1048576).toFixed(1)}MB</span><button class="dbtn" data-dsong="${esc(m.file)}" aria-label="حذف">✕</button></div>`).join("")||`<p class="dmut" style="font-size:.85rem">ما اكو أغاني بعد. دوس "ضيف أغاني" واختار ملفات MP3 من تلفونك، تنحفظ على تابليت البيت وتشتغل على أي أمبليفاير.</p>`}</div>`;
  if(libTab==="radio")body=`<form class="rsearch" data-rform><input class="setin" id="radQ" placeholder="دوّر: فيروز، أم كلثوم، قرآن، راديو…" value="${esc(radioQ)}" enterkeyhint="search"><button class="dbtn p" type="submit">🔍</button></form>
   <div class="asrc" style="margin:8px 0">${[["فيروز","q","fairuz"],["أم كلثوم","q","kalthoum"],["قرآن","tag","quran"],["العراق","cc","IQ"],["طرب","tag","tarab"],["عربي","tag","arabic"],["أطفال","tag","kids"]].map(([n,k,v])=>`<button class="dbtn" data-rchip="${k}|${v}|${n}">${n}</button>`).join("")}</div>

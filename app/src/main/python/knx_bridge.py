@@ -549,6 +549,52 @@ async def upload_music(req):
     return web.json_response({"ok": True, "added": n, "songs": music_list()})
 
 
+def _song_dest(fn: str):
+    stem, ext = os.path.splitext(os.path.basename(fn or ""))
+    if ext.lower() not in MUSIC_EXT:
+        return None
+    stem = re.sub(r'[\\/:*?"<>|#%&]+', " ", stem).strip()[:80] or "song"
+    dest = MUSIC_DIR / (stem + ext.lower())
+    i = 2
+    while dest.exists():
+        dest = MUSIC_DIR / f"{stem} ({i}){ext.lower()}"
+        i += 1
+    return dest
+
+
+async def upload_music_part(req):
+    """Songs from any phone, in small pieces so big files pass the relay and slow mobile data.
+    POST /api/music/part?up=<id>&name=<file>&i=<0..n-1>&n=<n>, raw body."""
+    up = re.sub(r"[^a-zA-Z0-9]", "", req.query.get("up", ""))[:32]
+    try:
+        i, n = int(req.query.get("i", "0")), int(req.query.get("n", "1"))
+    except ValueError:
+        return web.json_response({"ok": False, "error": "bad part"}, status=400)
+    name = req.query.get("name", "")
+    if not up or n < 1 or n > 200 or not 0 <= i < n or os.path.splitext(name)[1].lower() not in MUSIC_EXT:
+        return web.json_response({"ok": False, "error": "نوع الملف مو صوت"}, status=400)
+    MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = MUSIC_DIR / f".up-{up}"
+    data = await req.read()
+    if i == 0:
+        tmp.unlink(missing_ok=True)
+    elif not tmp.exists():
+        return web.json_response({"ok": False, "error": "انقطع الرفع، عيده"}, status=409)
+    if (tmp.stat().st_size if tmp.exists() else 0) + len(data) > 60 * 1024 * 1024:
+        tmp.unlink(missing_ok=True)
+        return web.json_response({"ok": False, "error": "الملف أكبر من 60 ميغا"}, status=413)
+    with open(tmp, "ab") as f:
+        f.write(data)
+    if i < n - 1:
+        return web.json_response({"ok": True, "part": i})
+    dest = _song_dest(name)
+    tmp.rename(dest)
+    for old in MUSIC_DIR.glob(".up-*"):  # leftovers of uploads that stopped half way
+        if time.time() - old.stat().st_mtime > 3600:
+            old.unlink(missing_ok=True)
+    return web.json_response({"ok": True, "added": 1, "file": dest.name, "songs": music_list()})
+
+
 async def delete_music(req):
     name = os.path.basename(req.match_info["name"])
     f = MUSIC_DIR / name
@@ -2116,6 +2162,7 @@ async def main() -> None:
         web.get("/api/music", get_music),
         web.get("/api/radio/search", radio_search),
         web.post("/api/music", upload_music),
+        web.post("/api/music/part", upload_music_part),
         web.delete("/api/music/{name}", delete_music),
         web.put("/api/music/stations", put_stations),
         web.get("/music/{name}", serve_music),
