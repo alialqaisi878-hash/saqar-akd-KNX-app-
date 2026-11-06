@@ -575,6 +575,58 @@ async def put_stations(req):
     return web.json_response({"ok": True, "stations": st})
 
 
+# internet radio directory (radio-browser.info: free, open, no key) so the customer finds stations inside the app
+RADIO_APIS = [str(CFG.get("radio_api") or "").rstrip("/")] if CFG.get("radio_api") else [
+    "https://de1.api.radio-browser.info", "https://de2.api.radio-browser.info",
+    "https://fi1.api.radio-browser.info", "https://nl1.api.radio-browser.info"]
+radio_cache: dict[str, tuple[float, list]] = {}
+
+
+async def radio_search(req):
+    import aiohttp
+    q = (req.query.get("q") or "").strip()[:60]
+    tag = (req.query.get("tag") or "").strip()[:40]
+    cc = (req.query.get("cc") or "").strip()[:2].upper()
+    key = f"{q}|{tag}|{cc}"
+    hit = radio_cache.get(key)
+    if hit and time.time() - hit[0] < 600:
+        return web.json_response({"ok": True, "stations": hit[1]})
+    base = {"limit": "40", "hidebroken": "true", "order": "clickcount", "reverse": "true"}
+    queries = []
+    if q:
+        queries += [dict(base, name=q), dict(base, tag=q)]
+    if tag:
+        queries.append(dict(base, tag=tag))
+    if cc:
+        queries.append(dict(base, countrycode=cc))
+    if not queries:
+        queries.append(dict(base, tag="arabic"))
+    out, seen, err = [], set(), None
+    async with aiohttp.ClientSession(headers={"User-Agent": "TATSMART/1.0"}, timeout=aiohttp.ClientTimeout(total=8)) as sess:
+        for api in RADIO_APIS:
+            try:
+                for params in queries:
+                    async with sess.get(api + "/json/stations/search", params=params) as r:
+                        for st in await r.json(content_type=None):
+                            url = st.get("url_resolved") or st.get("url") or ""
+                            codec = str(st.get("codec") or "").upper()
+                            if not url.startswith("http") or url in seen or (codec and codec not in ("MP3", "AAC", "AAC+", "OGG", "FLAC")):
+                                continue
+                            seen.add(url)
+                            out.append({"name": str(st.get("name") or "").strip()[:60], "url": url, "logo": st.get("favicon") or "",
+                                        "country": st.get("country") or "", "tags": str(st.get("tags") or "")[:60],
+                                        "kbps": st.get("bitrate") or 0})
+                err = None
+                break
+            except Exception as e:  # noqa: BLE001
+                err = e
+    if err is not None and not out:
+        return web.json_response({"ok": False, "error": "ما كدر يوصل لدليل الإذاعات (الإنترنت؟)", "stations": []})
+    out = out[:60]
+    radio_cache[key] = (time.time(), out)
+    return web.json_response({"ok": True, "stations": out})
+
+
 async def get_audio(_req):
     return web.json_response({"zones": audio_public()})
 
@@ -2062,6 +2114,7 @@ async def main() -> None:
         web.get("/api/audio", get_audio),
         web.post("/api/audio/cmd", audio_cmd),
         web.get("/api/music", get_music),
+        web.get("/api/radio/search", radio_search),
         web.post("/api/music", upload_music),
         web.delete("/api/music/{name}", delete_music),
         web.put("/api/music/stations", put_stations),

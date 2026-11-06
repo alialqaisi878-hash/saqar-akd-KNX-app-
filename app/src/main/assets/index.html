@@ -195,6 +195,9 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .azone .avol input{flex:1;accent-color:#a98bf0;min-width:0}
 .azone .asrc{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .lib .ltop{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rsearch{display:flex;gap:8px}.rsearch input{flex:1;min-width:0}
+.rlogo{width:32px;height:32px;border-radius:8px;object-fit:cover;flex:none;background:#fff}
+.sphow{padding:12px;border-radius:14px;background:rgba(30,215,96,.08);border:1px solid rgba(30,215,96,.3)}.sphow ol{margin:6px 0;padding-inline-start:20px}
 .slist{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:420px;overflow:auto}
 .srow{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--d-line)}
 .srow .sname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1331,7 +1334,11 @@ let camList=null,camBig=null,camTick=Date.now();
 async function loadCams(){try{camList=(await fetch("api/cameras").then(r=>r.json())).cameras||[];}catch(e){camList=[];}}
 function camTile(c,big){return `<button class="camt${big?" big":""}" data-cam="${esc(c.id)}"><img data-camimg="${esc(c.id)}" src="api/cam/${encodeURIComponent(c.id)}?t=${camTick}" alt="${esc(c.name)}" onerror="this.parentNode.classList.add('err')" onload="this.parentNode.classList.remove('err')"><span class="live">● مباشر</span><span class="ce">ما وصلت للكاميرا. تأكد من الـ IP والباسورد</span><span class="cl">${esc(c.name)}${c.room?" · "+esc(c.room):""}</span></button>`;}
 /* ---- audio: network amplifiers (DSPPA DW02xx and other LinkPlay / 4STREAM units) ---- */
-let audioZones=null,music=null,libTab="songs",libTarget="all",stAdd=false;
+let radioRes=null,radioQ="";
+async function radioFind(params,label){radioRes="busy";radioQ=label||"";renderDash();try{const r=await (await fetch("api/radio/search?"+new URLSearchParams(params))).json();radioRes=r.stations||[];if(!r.ok)toast(r.error||"ما وصل");}catch(e){radioRes=[];toast("ما وصل لدليل الإذاعات");}renderDash();}
+function saveStation(st){if(music.stations.some(x=>x.url===st.url)){toast("موجودة بإذاعاتك");return;}music.stations.push({name:st.name,url:st.url});
+ fetch("api/music/stations",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({stations:music.stations})}).then(r=>r.json()).then(r=>{music.stations=r.stations;renderDash();});toast("انحفظت بإذاعاتي");}
+let audioZones=null,music=null,libTab="radio",libTarget="all",stAdd=false;
 async function loadMusic(){try{music=await (await fetch("api/music")).json();}catch(e){music={songs:[],stations:[]};}if(dashOn&&dpage==="audio")renderDash();}
 function targets(){const z=audioZones||[];return libTarget==="all"?z.filter(x=>x.online!==false):z.filter(x=>x.id===libTarget);}
 function playOn(cmd,value,label){const t=targets();if(!t.length){toast("اختار أمبليفاير شغّال");return;}t.forEach(z=>{z.playing=true;z.title=label||z.title;z.artist="";audioCmd(z.id,cmd,value);});toast("▶ "+(label||"")+" · "+(libTarget==="all"?"بكل البيت":t[0].name));renderDash();}
@@ -1340,13 +1347,17 @@ async function uploadSongs(files){if(!files||!files.length)return;const fd=new F
 function libHtml(){
  if(music===null){loadMusic();return `<div class="dcard" style="min-height:0;margin-top:14px"><span class="dmut">جاري تحميل المكتبة…</span></div>`;}
  const z=audioZones||[];
- const tabs=[["songs","🎵 أغاني البيت"],["radio","📻 راديو"],["presets","⭐ مفضلات 4STREAM"]];
+ const tabs=[["radio","📻 إذاعات وأغاني"],["songs","🎵 أغاني البيت"],["presets","🟢 Spotify"]];
  let body="";
  if(libTab==="songs")body=`<label class="dbtn p" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">⬆ ضيف أغاني من التلفون<input type="file" accept="audio/*,.mp3,.m4a,.aac,.flac,.wav,.ogg" multiple data-upsong hidden></label>
   <div class="slist">${music.songs.map(m=>`<div class="srow"><button class="splay" data-psong="${esc(m.file)}" aria-label="شغّل">▶</button><span class="sname">${esc(m.name)}</span><span class="dmut num" style="font-size:.75rem">${(m.size/1048576).toFixed(1)}MB</span><button class="dbtn" data-dsong="${esc(m.file)}" aria-label="حذف">✕</button></div>`).join("")||`<p class="dmut" style="font-size:.85rem">ما اكو أغاني بعد. دوس "ضيف أغاني" واختار ملفات MP3 من تلفونك، تنحفظ على تابليت البيت وتشتغل على أي أمبليفاير.</p>`}</div>`;
- if(libTab==="radio")body=`<div class="slist">${music.stations.map((st,i)=>`<div class="srow"><button class="splay" data-pradio="${i}" aria-label="شغّل">▶</button><span class="sname">${esc(st.name)}</span><button class="dbtn" data-dradio="${i}" aria-label="حذف">✕</button></div>`).join("")||`<p class="dmut" style="font-size:.85rem">ضيف إذاعاتك المفضلة برابط البث مالها (يبدي بـ http).</p>`}</div>
+ if(libTab==="radio")body=`<form class="rsearch" data-rform><input class="setin" id="radQ" placeholder="دوّر: فيروز، أم كلثوم، قرآن، راديو…" value="${esc(radioQ)}" enterkeyhint="search"><button class="dbtn p" type="submit">🔍</button></form>
+  <div class="asrc" style="margin:8px 0">${[["فيروز","q","fairuz"],["أم كلثوم","q","kalthoum"],["قرآن","tag","quran"],["العراق","cc","IQ"],["طرب","tag","tarab"],["عربي","tag","arabic"],["أطفال","tag","kids"]].map(([n,k,v])=>`<button class="dbtn" data-rchip="${k}|${v}|${n}">${n}</button>`).join("")}</div>
+  ${radioRes==="busy"?`<p class="dmut">جاري البحث…</p>`:Array.isArray(radioRes)?`<div class="slist">${radioRes.map((st,i)=>`<div class="srow"><button class="splay" data-rplay="${i}" aria-label="شغّل">▶</button>${st.logo?`<img src="${esc(st.logo)}" alt="" class="rlogo" onerror="this.remove()" loading="lazy" referrerpolicy="no-referrer">`:""}<span class="sname">${esc(st.name)}<small class="dmut" style="display:block;font-size:.72rem">${esc([st.country,st.kbps?st.kbps+"kbps":""].filter(Boolean).join(" · "))}</small></span><button class="dbtn" data-rsave="${i}" aria-label="احفظ">☆</button></div>`).join("")||`<p class="dmut">ما لكيت شي. جرّب كلمة ثانية أو بالإنكليزي.</p>`}</div>`:""}
+  <b style="display:block;margin-top:12px">⭐ إذاعاتي</b><div class="slist">${music.stations.map((st,i)=>`<div class="srow"><button class="splay" data-pradio="${i}" aria-label="شغّل">▶</button><span class="sname">${esc(st.name)}</span><button class="dbtn" data-dradio="${i}" aria-label="حذف">✕</button></div>`).join("")||`<p class="dmut" style="font-size:.85rem">دوس ☆ على أي إذاعة حتى تنحفظ هنا.</p>`}</div>
   ${stAdd?`<div class="irow" data-keep="1"><label>الاسم<input class="setin" id="stName" placeholder="إذاعة القرآن"></label><label style="grid-column:span 2">رابط البث<input class="setin" id="stUrl" dir="ltr" placeholder="https://...mp3"></label><button class="dbtn p" data-saverad="1">حفظ</button></div>`:`<button class="dbtn" data-addrad="1">+ إذاعة</button>`}`;
- if(libTab==="presets")body=`<p class="dmut" style="font-size:.82rem;margin:0 0 8px">بتطبيق 4STREAM تكدر تحفظ أي قائمة من Spotify أو TIDAL أو الراديو كـ"مفضلة" برقم. هنا تشغلها بدوسة.</p><div class="pgrid">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="dbtn" data-ppre="${n}">⭐ ${n}</button>`).join("")}</div>`;
+ if(libTab==="presets")body=`<div class="sphow"><b>أي أغنية تريدها من Spotify:</b><ol><li>افتح Spotify واختار الأغنية.</li><li>دوس أيقونة السماعات 🔊 تحت.</li><li>اختار اسم الأمبليفاير (${esc((z[0]||{}).name||"الصالة")}).</li></ol><p class="dmut" style="font-size:.8rem;margin:0">وبعدها تتحكم بيها من هنا: إيقاف، التالي، الصوت.</p><a class="dbtn p" href="https://open.spotify.com/search" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;text-decoration:none">افتح Spotify</a></div>
+  <p class="dmut" style="font-size:.82rem;margin:12px 0 8px">مفضلات محفوظة بالأمبليفاير (من تطبيق 4STREAM):</p><div class="pgrid">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="dbtn" data-ppre="${n}">⭐ ${n}</button>`).join("")}</div>`;
  return `<div class="dcard lib" data-keep="1" style="min-height:0;margin-top:14px">
   <div class="ltop"><b>المكتبة</b><span class="dmut" style="font-size:.82rem">شغّل على:</span>
    <div class="asrc">${[["all","كل البيت"]].concat(z.map(x=>[x.id,x.name])).map(([k,n])=>`<button class="dbtn${libTarget===k?" p":""}" data-tgt="${esc(k)}">${esc(n)}</button>`).join("")}</div></div>
@@ -1680,6 +1691,9 @@ function dashClick(e){
  if(b=q("[data-amute]")){const z=audioZones.find(x=>x.id===b.dataset.amute);audioCmd(z.id,"mute",z.mute?0:1);renderDash();return;}
  if(b=q("[data-asrc]")){const [id,k]=b.dataset.asrc.split("|");audioCmd(id,"src",k);toast("تحوّل المصدر");return;}
  if(b=q("[data-findaud]")){findAudio();return;}
+ if(b=q("[data-rchip]")){const [k,v,n]=b.dataset.rchip.split("|");radioFind({[k]:v},n);return;}
+ if(b=q("[data-rplay]")){const st=radioRes[+b.dataset.rplay];playOn("url",st.url,st.name);return;}
+ if(b=q("[data-rsave]")){saveStation(radioRes[+b.dataset.rsave]);return;}
  if(b=q("[data-tgt]")){libTarget=b.dataset.tgt;renderDash();return;}
  if(b=q("[data-ltab]")){libTab=b.dataset.ltab;renderDash();return;}
  if(b=q("[data-psong]")){const m=music.songs.find(x=>x.file===b.dataset.psong);playOn("song",m.file,m.name);return;}
@@ -2029,8 +2043,9 @@ $("#tLog").onclick=()=>{tab="log";renderPane();};
 $("#tSch").onclick=()=>{tab="sch";renderPane();};
 $("#dash").addEventListener("click",dashClick);
 $("#dash").addEventListener("change",dashChange);
+$("#dash").addEventListener("submit",e=>{const f=e.target.closest("[data-rform]");if(!f)return;e.preventDefault();const v=($("#radQ")||{}).value||"";if(v.trim())radioFind({q:v.trim()},v.trim());});
 $("#dash").addEventListener("input",dashInput);
-$("#dash").addEventListener("submit",e=>{e.preventDefault();sendChat($("#chatIn").value);});
+$("#dash").addEventListener("submit",e=>{if(!$("#chatIn")||e.target.closest("[data-rform]"))return;e.preventDefault();sendChat($("#chatIn").value);});
 $("#dash").addEventListener("keydown",e=>{if(e.target.id==="chatIn"&&e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat(e.target.value);}});
 $("#dashBack").onclick=()=>{dashOn=true;try{localStorage.setItem("knx-dash","1");}catch(_){}renderDash();renderStage();};
 try{dashOn=localStorage.getItem("knx-dash")!=="0";}catch(e){}

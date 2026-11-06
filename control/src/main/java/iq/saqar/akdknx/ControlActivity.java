@@ -136,6 +136,21 @@ public class ControlActivity extends Activity {
                 ui.postDelayed(() -> openBest(true), 4000);
             }
 
+            // links that leave the house (Spotify, web pages) open in their own app, not inside TAT SMART
+            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
+                Uri u = r.getUrl();
+                String cur = v.getUrl();
+                String host = u.getHost() == null ? "" : u.getHost();
+                boolean http = "http".equals(u.getScheme()) || "https".equals(u.getScheme());
+                if (http && (r.isRedirect() || host.endsWith("saqar-akd.com.iq") || (cur != null && host.equals(Uri.parse(cur).getHost())))) return false;
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) {
+                    Toast.makeText(ControlActivity.this, "ما كدر يفتح الرابط", Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            }
+
             @Override public void onPageFinished(WebView v, String u) {
                 CookieManager.getInstance().flush(); // keep the login after the app closes
             }
