@@ -1183,6 +1183,21 @@ async function sendChat(text){
  renderDash();const box=$("#chatMsgs");if(box)box.scrollTop=box.scrollHeight;
 }
 async function reloadProject(){try{const s=await fetch("api/project").then(r=>r.json());if(s&&s.projects&&s.projects.length){const old={};db.projects.forEach(p=>p.devices.forEach(d=>old[d.id]=d.st));db=s;db.projects.forEach(p=>p.devices.forEach(d=>{if(old[d.id])d.st=Object.assign({},d.st,old[d.id]);}));tuyaApply();render();renderDash();}}catch(e){}}
+function sceneAudioHtml(sc){
+ if(audioZones===null||music===null)return `<div class="muted" style="font-size:.8rem">جاري تحميل الأمبليفايرات…</div>`;
+ if(!audioZones.length)return `<div class="muted" style="font-size:.8rem">ما اكو أمبليفايرات مضافة.</div>`;
+ const opt=a=>{const v=a?(!a.on?"off":a.song?"s:"+a.song:a.url?"u:"+a.url:a.preset?"p:"+a.preset:"play"):"play";
+  return `<option value="play"${v==="play"?" selected":""}>كمّل الشي الشغّال</option><option value="off"${v==="off"?" selected":""}>إيقاف</option>`+
+  (music.songs.length?`<optgroup label="أغاني البيت">${music.songs.map(m=>`<option value="s:${esc(m.file)}"${v==="s:"+m.file?" selected":""}>${esc(m.name)}</option>`).join("")}</optgroup>`:"")+
+  (music.stations.length?`<optgroup label="راديو">${music.stations.map(st=>`<option value="u:${esc(st.url)}"${v==="u:"+st.url?" selected":""}>${esc(st.name)}</option>`).join("")}</optgroup>`:"")+
+  `<optgroup label="مفضلات 4STREAM">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="p:${n}"${v==="p:"+n?" selected":""}>مفضلة ${n}</option>`).join("")}</optgroup>`;};
+ return audioZones.map(z=>{const a=(sc.actions||[]).find(x=>x.audio===z.id);
+  return `<label style="flex-wrap:wrap"><input type="checkbox" data-sau="${esc(z.id)}" ${a?"checked":""}>🎵 ${esc(z.name)} <span class="muted">${esc(z.room||"")}</span>
+   <select data-sauw="${esc(z.id)}" style="width:auto;max-width:52%;padding:2px 6px;margin-inline-start:auto">${opt(a)}</select>
+   <input type="number" data-sauv="${esc(z.id)}" min="0" max="100" value="${a&&a.vol!=null?a.vol:""}" placeholder="صوت" style="width:64px;padding:2px 6px"></label>`;}).join("");
+}
+function sceneAudioRead(s){return [...s.querySelectorAll("[data-sau]")].filter(c=>c.checked).map(c=>{const id=c.dataset.sau,w=s.querySelector(`[data-sauw="${id}"]`).value,v=s.querySelector(`[data-sauv="${id}"]`).value;
+ const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:"))a.url=w.slice(2);if(w.startsWith("p:"))a.preset=+w.slice(2);return a;});}
 function editScene(id){
  const p=P();p.scenes=p.scenes||[];const old=p.scenes.find(s=>s.id===id);
  const sc=old?JSON.parse(JSON.stringify(old)):{id:uid(),name:"",icon:"sofa",actions:[]};
@@ -1196,12 +1211,14 @@ function editScene(id){
    return `<label style="flex-wrap:wrap"><input type="checkbox" data-sa="${d.id}" ${a?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span>
    <select data-son="${d.id}" style="width:auto;padding:2px 6px;margin-inline-start:auto"><option value="1" ${!a||a.on?"selected":""}>${d.type==="blind"?"تنزل":"تشغيل"}</option><option value="0" ${a&&!a.on?"selected":""}>${d.type==="blind"?"تصعد":"إطفاء"}</option></select>
    ${lv?`<input type="number" data-slv="${d.id}" min="1" max="100" value="${a&&a.level!=null?a.level:""}" placeholder="%" style="width:64px;padding:2px 6px">`:""}</label>`;}).join("")}</div></div>
+  <div class="field"><label>الصوت</label><div class="devpick" id="scAud" style="max-height:30vh">${sceneAudioHtml(sc)}</div></div>
   <div class="actions">${old?`<button class="btn danger" id="scDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="scOk">حفظ</button></div></div>`,s=>{
   s.querySelectorAll("[data-ic]").forEach(b=>b.onclick=()=>{sc.icon=b.dataset.ic;s.querySelectorAll("[data-ic]").forEach(x=>x.setAttribute("aria-pressed",x===b));if(!$("#scN").value)$("#scN").value=SCENE_ICONS.find(x=>x[0]===sc.icon)[1];});
   $("#scCap").onclick=()=>{devs.forEach(d=>{const cb=s.querySelector(`[data-sa="${d.id}"]`);cb.checked=true;s.querySelector(`[data-son="${d.id}"]`).value=isOnD(d)?"1":"0";const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv)lv.value=d.st.on?(d.st.level||100):"";});toast("انأخذ وضع كل الأجهزة هسة");};
-  $("#scOk").onclick=()=>{sc.name=$("#scN").value.trim()||"مشهد";sc.actions=devs.filter(d=>s.querySelector(`[data-sa="${d.id}"]`).checked).map(d=>{const a={id:d.id,on:s.querySelector(`[data-son="${d.id}"]`).value==="1"};const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv&&lv.value)a.level=Math.max(1,Math.min(100,+lv.value));if(d.type==="blind")a.position=a.on?100:0;return a;});
+  $("#scOk").onclick=()=>{sc.name=$("#scN").value.trim()||"مشهد";sc.actions=devs.filter(d=>s.querySelector(`[data-sa="${d.id}"]`).checked).map(d=>{const a={id:d.id,on:s.querySelector(`[data-son="${d.id}"]`).value==="1"};const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv&&lv.value)a.level=Math.max(1,Math.min(100,+lv.value));if(d.type==="blind")a.position=a.on?100:0;return a;}).concat(sceneAudioRead(s));
    if(!sc.actions.length){toast("اختار جهاز واحد على الأقل");return;}
    if(old)p.scenes[p.scenes.indexOf(old)]=sc;else p.scenes.push(sc);saveScenes();close();renderDash();toast("انحفظ المشهد");};
+  if(audioZones===null||music===null)Promise.all([audioZones===null?loadAudio():0,music===null?loadMusic():0]).then(()=>{const el=$("#scAud");if(el)el.innerHTML=sceneAudioHtml(sc);});
   const del=$("#scDel");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية";return;}p.scenes=p.scenes.filter(x=>x.id!==sc.id);saveScenes();close();renderDash();};
  });
 }

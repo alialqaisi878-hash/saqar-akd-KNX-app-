@@ -1038,11 +1038,21 @@ async def run_scene_actions(scene: dict) -> int:
     for a in scene.get("actions", []):
         if a.get("audio"):  # {"audio": amp id, "cmd": play|pause|vol|src, "value": ...}
             try:
-                if a.get("vol") is not None:
-                    await audio_do(a["audio"], "vol", a["vol"])
-                if a.get("src"):
-                    await audio_do(a["audio"], "src", a["src"])
-                await audio_do(a["audio"], "play" if a.get("on", True) else "pause")
+                if not a.get("on", True):
+                    await audio_do(a["audio"], "pause")
+                else:
+                    if a.get("vol") is not None:
+                        await audio_do(a["audio"], "vol", a["vol"])
+                    if a.get("song"):
+                        await audio_do(a["audio"], "song", a["song"])
+                    elif a.get("url"):
+                        await audio_do(a["audio"], "url", a["url"])
+                    elif a.get("preset"):
+                        await audio_do(a["audio"], "preset", a["preset"])
+                    else:
+                        if a.get("src"):
+                            await audio_do(a["audio"], "src", a["src"])
+                        await audio_do(a["audio"], "play")
                 n += 1
             except Exception as err:  # noqa: BLE001
                 log.warning("scene %s: audio %s", scene.get("name"), err)
