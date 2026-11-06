@@ -301,6 +301,18 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .sol .alert{font-size:.82rem;padding:10px 12px;border-radius:12px;background:rgba(255,192,112,.08);border:1px solid rgba(255,192,112,.25);margin-top:12px}
 .sol .demo{color:var(--d-warm);font-size:.75rem;border:1px solid rgba(255,192,112,.3);border-radius:99px;padding:4px 10px}
 
+/* home layout editor */
+.hhead{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:-6px 0 10px}.hhead .dmut{flex:1;font-size:.82rem}
+.hcust{opacity:.75;font-size:.75rem}.hcust:hover{opacity:1}
+.dfav{grid-column:span 12}
+.hsec.hedit{outline:1.5px dashed rgba(108,156,230,.55);outline-offset:3px;position:relative}
+.hsec.hhid{opacity:.4}
+.hbar{position:relative;z-index:5;display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:rgba(10,16,28,.92);border:1px solid var(--d-line);border-radius:12px;padding:6px 8px;margin-bottom:8px;font-size:.8rem}
+.dhero .hbar,.dac .hbar{position:absolute;top:8px;inset-inline:8px}
+.hbar .sp{flex:1}.hbar .dbtn{padding:4px 9px;font-size:.75rem}.hbar select{background:#0b1322;border:1px solid var(--d-line);border-radius:8px;color:var(--d-ink);padding:4px;font:inherit;font-size:.75rem;max-width:140px}
+.hempty{min-height:90px;display:grid;align-content:start}
+.favedit{display:grid;gap:6px}.favedit .fe{display:flex;gap:6px;align-items:center;background:var(--d-card);border:1px solid var(--d-line);border-radius:12px;padding:6px 10px}.favedit .fe span{flex:1}
+@media (max-width:820px){.hsec{grid-column:span 12!important}}
 /* automations */
 .auto .acard{min-height:0;display:grid;gap:12px}
 .auto .agrid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}@media(max-width:760px){.auto .agrid{grid-template-columns:1fr}}
@@ -990,34 +1002,79 @@ function dialSvg(v,on){const min=16,max=30,k=Math.max(0,Math.min(1,(v-min)/(max-
  <defs><linearGradient id="acg" x1="0" x2="1"><stop offset="0" stop-color="#6c9ce6"/><stop offset="1" stop-color="#5aa9ff"/></linearGradient></defs></svg>`;}
 const AC_UNIT=`<svg class="acunit" viewBox="0 0 200 70"><rect x="4" y="4" width="192" height="44" rx="10" fill="#eef2f1"/><rect x="14" y="36" width="172" height="6" rx="3" fill="#cfd6d4"/><circle cx="176" cy="16" r="2.5" fill="#6c9ce6"/>
  <g stroke="#7fd3ff" stroke-width="2.5" fill="none" opacity=".75" stroke-linecap="round"><path d="M40 52c-4 6-4 10 0 16"/><path d="M80 52c-3 6-3 10 0 16"/><path d="M120 52c3 6 3 10 0 16"/><path d="M160 52c4 6 4 10 0 16"/></g></svg>`;
+/* ---------- home layout: the owner picks, orders, sizes and hides the home cards ---------- */
+let homeEdit=false;
+const HOME_SECS={hero:"صورة الغرفة",ac:"التبريد",fav:"المفضلة",light:"الإنارة",blind:"الستائر",energy:"الأجهزة والكهرباء",scenes:"المشاهد"};
+const HOME_SIZE={hero:7,ac:5,fav:12,light:4,blind:4,energy:4,scenes:12};
+function homeCfg(p){const h=Object.assign({order:[],hidden:[],size:{},pick:{}},p.home||{});const all=Object.keys(HOME_SECS);h.order=h.order.filter(k=>all.includes(k)).concat(all.filter(k=>!h.order.includes(k)));return h;}
+function homeArrange(html,H){
+ const t=document.createElement("div");t.innerHTML=html;const g=t.firstElementChild;if(!g)return html;
+ const els={};[...g.querySelectorAll(":scope>[data-hs]")].forEach(e=>{els[e.dataset.hs]=e;e.remove();});
+ const p=P(),devs=p.devices,rooms=roomsOf();
+ H.order.forEach((k,i)=>{let e=els[k];const hid=H.hidden.includes(k);
+  if(!e){if(!homeEdit)return;e=document.createElement("div");e.className="dcard hempty";e.dataset.hs=k;e.innerHTML=`<div class="dmut">${HOME_SECS[k]}: ماكو جهاز من هذا النوع</div>`;}
+  if(hid&&!homeEdit)return;
+  const span=H.size[k]||HOME_SIZE[k];e.style.gridColumn="span "+span;e.classList.add("hsec");
+  if(homeEdit){e.classList.add("hedit");if(hid)e.classList.add("hhid");
+   const opts=k==="hero"?rooms.map(r=>[r,r]):k==="ac"?devs.filter(d=>d.type==="hvac").map(d=>[d.id,d.name]):k==="light"?devs.filter(isLight).map(d=>[d.id,d.name]):k==="blind"?devs.filter(d=>d.type==="blind").map(d=>[d.id,d.name]):[];
+   const bar=document.createElement("div");bar.className="hbar";
+   bar.innerHTML=`<b>${HOME_SECS[k]}</b><span class="sp"></span>${opts.length>1?`<select data-hpick="${k}">${opts.map(([v,n])=>`<option value="${esc(v)}"${(H.pick[k]===v)?" selected":""}>${esc(n)}</option>`).join("")}</select>`:""}
+    <button class="dbtn" data-hsz="${k}" title="الحجم">${span>=12?"كبير":span>=6?"وسط":"صغير"}</button>
+    <button class="dbtn" data-hmv="${k}" data-d="-1"${i===0?" disabled":""}>▲</button><button class="dbtn" data-hmv="${k}" data-d="1"${i===H.order.length-1?" disabled":""}>▼</button>
+    <button class="dbtn" data-hhide="${k}">${hid?"👁 إظهار":"إخفاء"}</button>`;
+   e.prepend(bar);}
+  g.appendChild(e);});
+ const top=`<div class="hhead">${homeEdit?`<span class="dmut">رتّب الرئيسية مثل ما تحب: كبّر وصغّر، صعّد ونزّل، أخفي الي ما تحتاجه.</span><button class="dbtn" data-hreset>رجّع الأصلي</button><button class="dbtn p" data-hdone>✓ تم</button>`:`<button class="dbtn hcust" data-hedit>✏ تخصيص الرئيسية</button>`}</div>`;
+ return top+t.innerHTML;}
+function favEdit(list){list=list.slice().sort(byOrd);return `<div class="favedit">${list.map((d,i)=>`<div class="fe"><span>${esc(d.name)}</span><button class="dbtn" data-fmv="${d.id}" data-d="-1"${i===0?" disabled":""}>▲</button><button class="dbtn" data-fmv="${d.id}" data-d="1"${i===list.length-1?" disabled":""}>▼</button><button class="dbtn" data-fav="${d.id}">✕</button></div>`).join("")}</div><div class="dmut" style="margin-top:6px">تضيف للمفضلة من ♡ بالإعدادات أو من صفحة الإنارة.</div>`;}
+function homeSave(){const p=P();const body={project:p.id,devices:{},home:p.home||{}};p.devices.forEach(d=>body.devices[d.id]={name:d.name,fav:!!d.fav,ord:d.ord??null});
+ if(role.installer){save();return;}
+ fetch("api/owner",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>toast("ما انحفظ"));}
+function homeClick(t){const q=s=>t.closest(s);let b;const p=P();
+ if(q("[data-hedit]")){homeEdit=true;renderDash();return true;}
+ if(q("[data-hdone]")){homeEdit=false;homeSave();toast("انحفظت الرئيسية");renderDash();return true;}
+ if(!homeEdit)return false;
+ const H=homeCfg(p);
+ if(q("[data-hreset]")){p.home={};homeSave();renderDash();return true;}
+ if(b=q("[data-hmv]")){const k=b.dataset.hmv,i=H.order.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=H.order.length)return true;[H.order[i],H.order[j]]=[H.order[j],H.order[i]];p.home=H;homeSave();renderDash();return true;}
+ if(b=q("[data-hsz]")){const k=b.dataset.hsz,cur=H.size[k]||HOME_SIZE[k];H.size[k]=cur<6?6:cur<12?12:4;p.home=H;homeSave();renderDash();return true;}
+ if(b=q("[data-hhide]")){const k=b.dataset.hhide;H.hidden=H.hidden.includes(k)?H.hidden.filter(x=>x!==k):H.hidden.concat(k);p.home=H;homeSave();renderDash();return true;}
+ if(b=q("[data-fmv]")){const fav=p.devices.filter(d=>d.fav).sort(byOrd);const all=p.devices.slice().sort(byOrd);all.forEach((d,i)=>d.ord=i);
+  const i=fav.findIndex(x=>x.id===b.dataset.fmv),j=i+ +b.dataset.d;if(j<0||j>=fav.length)return true;const a=fav[i],c=fav[j];[a.ord,c.ord]=[c.ord,a.ord];homeSave();renderDash();return true;}
+ if(q("[data-fav]")){const d=p.devices.find(x=>x.id===q("[data-fav]").dataset.fav);d.fav=false;homeSave();renderDash();return true;}
+ if(q(".hbar"))return true;
+ if(q(".hedit"))return true; // no device actions while arranging
+ return false;}
+function homeChange(t){if(t.dataset.hpick){const p=P(),H=homeCfg(p);H.pick[t.dataset.hpick]=t.value;p.home=H;homeSave();renderDash();return true;}return false;}
 function dashHome(){
  const p=P(),devs=p.devices;const rooms=roomsOf();
- const heroRoom=rooms.find(r=>roomPhoto(r))||rooms[0]||"";const photo=heroRoom?roomPhoto(heroRoom):"";
+ const H=homeCfg(p),pk=H.pick||{};
+ const heroRoom=(pk.hero&&rooms.includes(pk.hero)?pk.hero:null)||rooms.find(r=>roomPhoto(r))||rooms[0]||"";const photo=heroRoom?roomPhoto(heroRoom):"";
  const lightsOn=devs.filter(d=>isLight(d)&&d.st.on).length,lightsAll=devs.filter(isLight).length;
- const ac=devs.find(d=>d.type==="hvac"),dim=devs.find(d=>d.type==="dimmer"||(d.type==="tuya"&&d.dimCode))||devs.find(isLight),bl=devs.find(d=>d.type==="blind");
+ const byId=id=>devs.find(d=>d.id===id);const ac=byId(pk.ac)||devs.find(d=>d.type==="hvac"),dim=byId(pk.light)||devs.find(d=>d.type==="dimmer"||(d.type==="tuya"&&d.dimCode))||devs.find(isLight),bl=byId(pk.blind)||devs.find(d=>d.type==="blind");
  let watts=0,meters=0;devs.forEach(d=>{if(d.type==="tuya"){const f=tuyaFeat(d);if(f.power!=null){watts+=f.power;meters++;}}});
  const heroDevs=heroRoom?devs.filter(d=>d.room===heroRoom):devs;const heroOn=heroDevs.filter(d=>isLight(d)&&d.st.on).length;
- return `<div class="dgrid">
- <div class="dcard dhero" data-room="${esc(heroRoom)}">${photo?`<img src="${photo}" alt="">`:(p.plan?`<img src="${p.plan}" alt="" style="object-fit:contain;background:#e9eef0;opacity:.85">`:"")}<div class="ov"></div>
+ return homeArrange(`<div class="dgrid">
+ <div class="dcard dhero" data-hs="hero" data-room="${esc(heroRoom)}">${photo?`<img src="${photo}" alt="">`:(p.plan?`<img src="${p.plan}" alt="" style="object-fit:contain;background:#e9eef0;opacity:.85">`:"")}<div class="ov"></div>
   <span class="tag2">${esc(heroRoom||p.name||"البيت")}</span>
   <div class="cap"><div class="t">${esc(heroRoom||"البيت")}</div><div class="s">${heroOn?heroOn+" ضوء شغّال":"كل الإنارة طافية"}${!photo&&role.installer?" · ارفع صورة الغرفة من صفحة الغرف":""}</div></div></div>
- ${ac?`<div class="dcard dac"><h3>${DI.ac}التبريد · ${esc(ac.name)}</h3><button class="dpwr${ac.st.on?" on":""}" data-pw="${ac.id}" aria-label="تشغيل/إطفاء">${DI.power}</button>${AC_UNIT}
+ ${ac?`<div class="dcard dac" data-hs="ac"><h3>${DI.ac}التبريد · ${esc(ac.name)}</h3><button class="dpwr${ac.st.on?" on":""}" data-pw="${ac.id}" aria-label="تشغيل/إطفاء">${DI.power}</button>${AC_UNIT}
   <div class="dial" style="margin-top:46px">${dialSvg(ac.st.setpoint||22,ac.st.on)}<span class="val">${ac.st.setpoint||22}°</span><span class="rt">الغرفة ${ac.st.temp??"–"}°</span>
   <button class="pm l" data-sp="${ac.id}" data-d="-0.5">−</button><button class="pm r" data-sp="${ac.id}" data-d="0.5">+</button></div></div>`
-  :`<div class="dcard dac"><h3>${DI.bolt}البيت الآن</h3><div class="dbig">${lightsOn}<span class="dmut"> / ${lightsAll} ضوء شغّال</span></div><div class="dmut" style="margin-top:8px">${sunT.sunset?"🌇 الغروب "+sunT.sunset+" · 🌅 الشروق "+sunT.sunrise:""}</div></div>`}
- ${devs.some(d=>d.fav)?`<div style="grid-column:span 12"><div class="dsec" style="margin-top:0;justify-content:flex-start">${DI.heart} المفضلة</div>${tilesHtml(devs.filter(d=>d.fav))}</div>`:""}
- ${dim?`<div class="dcard dlight"><h3>${DI.light}الإنارة · ${esc(dim.name)}</h3><button class="more" data-go="light">الكل ‹</button>
+  :`<div class="dcard dac" data-hs="ac"><h3>${DI.bolt}البيت الآن</h3><div class="dbig">${lightsOn}<span class="dmut"> / ${lightsAll} ضوء شغّال</span></div><div class="dmut" style="margin-top:8px">${sunT.sunset?"🌇 الغروب "+sunT.sunset+" · 🌅 الشروق "+sunT.sunrise:""}</div></div>`}
+ ${devs.some(d=>d.fav)?`<div class="dfav" data-hs="fav"><div class="dsec" style="margin-top:0;justify-content:flex-start">${DI.heart} المفضلة</div>${homeEdit?favEdit(devs.filter(d=>d.fav)):tilesHtml(devs.filter(d=>d.fav))}</div>`:""}
+ ${dim?`<div class="dcard dlight" data-hs="light"><h3>${DI.light}الإنارة · ${esc(dim.name)}</h3><button class="more" data-go="light">الكل ‹</button>
   <div class="lamp" style="--lo:${dim.st.on?Math.max(.3,(dim.st.level||100)/100):0};--lc:${devColor(dim)||"#ffd28a"}"><span class="glow"></span><span class="ring"></span></div>
   ${dim.type==="dimmer"||dim.dimCode?`<div class="dsl"><span>${dim.st.on?(dim.st.level||0):0}%</span><input type="range" min="0" max="100" step="5" value="${dim.st.on?(dim.st.level||0):0}" data-lv="${dim.id}"></div>`
    :`<div class="dsl"><button class="dbtn p" data-tg="${dim.id}" style="flex:1">${dim.st.on?"إطفاء":"تشغيل"}</button></div>`}</div>`:""}
- ${bl?`<div class="dcard dblind"><h3>${DI.blind}الستائر · ${esc(bl.name)}</h3><button class="more" data-go="blind">الكل ‹</button>
+ ${bl?`<div class="dcard dblind" data-hs="blind"><h3>${DI.blind}الستائر · ${esc(bl.name)}</h3><button class="more" data-go="blind">الكل ‹</button>
   <div class="curt"><span class="cl a" style="width:${(bl.st.pos||0)/2}%"></span><span class="cl b" style="width:${(bl.st.pos||0)/2}%"></span></div>
   <div class="dsl"><span>${bl.st.pos||0}%</span><input type="range" min="0" max="100" step="5" value="${bl.st.pos||0}" data-ps="${bl.id}"></div></div>`:""}
- <div class="dcard denergy"><h3>${DI.bolt}${meters?"الكهرباء":"الأجهزة"}</h3>${meters?`<div class="dbig">${Math.round(watts).toLocaleString("en")}<span class="dmut"> واط الآن</span></div><div class="dmut">من ${meters} عداد ذكي</div>`
+ <div class="dcard denergy" data-hs="energy"><h3>${DI.bolt}${meters?"الكهرباء":"الأجهزة"}</h3>${meters?`<div class="dbig">${Math.round(watts).toLocaleString("en")}<span class="dmut"> واط الآن</span></div><div class="dmut">من ${meters} عداد ذكي</div>`
    :`<div class="dbig">${devs.filter(d=>isOnD(d)&&d.type!=="blind").length}<span class="dmut"> جهاز شغّال</span></div>`}
   <div class="dmut" style="margin-top:10px">${knxState==="connected"?"● KNX متصل":"○ KNX غير متصل"}</div></div>
- <div class="dscenes">${sceneBtns()}</div>
- </div>`;
+ <div class="dscenes" data-hs="scenes">${sceneBtns()}</div>
+ </div>`,H);
 }
 function dashRooms(){
  const rooms=roomsOf(),p=P();
@@ -1499,6 +1556,7 @@ function dashClick(e){
  if(b=q("[data-adv]")){const d=P().devices.find(x=>x.id===b.dataset.adv);operate(d);return;}
  if(dpage==="maint"&&mntClick(t))return;
  if(dpage==="auto"&&autoClick(t))return;
+ if(dpage==="home"&&homeClick(t))return;
  if(b=q("[data-espan]")){energySpan=+b.dataset.espan;renderDash();return;}
  if(q("[data-noopen]")){return;}
  if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer)loadBInfo();if(k==="auto")loadAuto();renderDash();return;}
@@ -1532,6 +1590,7 @@ function dashClick(e){
 function dashChange(e){
  const t=e.target;
  if(dpage==="auto"&&autoChange(t))return;
+ if(dpage==="home"&&homeChange(t))return;
  if(t.dataset.timp!=null&&t.files&&t.files[0]){t.files[0].text().then(txt=>{let j;try{j=JSON.parse(txt);}catch(e){toast("الملف مو قالب");return;}if(!j.tat_template||!Array.isArray(j.devices)){toast("الملف مو قالب TAT");return;}
   const n=prompt("اسم البيت الجديد",(j.name||"بيت")+" (نسخة)");if(!n)return;const p={id:uid(),name:n,plan:null,planW:0,planH:0,gas:j.gas||[],devices:j.devices,scenes:j.scenes||[],solarRules:j.solarRules||{},rooms:j.rooms||{}};
   db.projects.push(p);db.current=p.id;save();renderDash();render();toast("انستورد القالب، عدّل العناوين من الصيانة");});return;}
@@ -1874,6 +1933,7 @@ $("#vw2").onclick=()=>{view3d=false;try{localStorage.setItem("knx-view","2d");}c
 $("#vw3").onclick=()=>{if(!P().plan){toast("ارفع خريطة أول");return;}view3d=true;try{localStorage.setItem("knx-view","3d");}catch(e){}renderStage();};
 try{view3d=localStorage.getItem("knx-view")==="3d";}catch(e){}
 
+(function(){if(CUSTOMER_APP&&window.TATApp&&TATApp.setLan&&location.protocol==="https:")fetch("api/bridge").then(r=>r.json()).then(b=>{if(b.lan&&b.lan.length)TATApp.setLan(JSON.stringify(b.lan));}).catch(()=>{});})();
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;if(CUSTOMER_APP){if(role.installer&&role.locked)fetch("api/installer/logout",{method:"POST"}).catch(()=>{});role={installer:false,locked:false};}}).catch(()=>{})
 .then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());});
 })();

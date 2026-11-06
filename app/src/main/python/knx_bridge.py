@@ -902,6 +902,15 @@ async def put_owner(req):
             d["fav"] = bool(ch.get("fav"))
             if isinstance(ch.get("ord"), int):
                 d["ord"] = ch["ord"]
+        h = data.get("home")
+        if isinstance(h, dict):
+            keys = {"hero", "ac", "fav", "light", "blind", "energy", "scenes"}
+            pr["home"] = {
+                "order": [k for k in h.get("order", []) if k in keys][:20],
+                "hidden": [k for k in h.get("hidden", []) if k in keys][:20],
+                "size": {k: v for k, v in (h.get("size") or {}).items() if k in keys and v in (4, 5, 6, 7, 8, 12)},
+                "pick": {k: str(v)[:80] for k, v in (h.get("pick") or {}).items() if k in keys},
+            }
         PROJECT_FILE.write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
         return web.json_response({"ok": True})
     return web.json_response({"ok": False}, status=404)
@@ -1330,6 +1339,7 @@ async def bridge_info(_req):
         "house": CFG.get("house_id", ""), "gateway": CFG.get("gateway_ip", ""), "tuya": tuya_state,
         "assistant": ("gemini" if AI_KEY.startswith("AIza") else "claude") if AI_KEY else "local",
         "app": os.environ.get("KNX_APP_VERSION", ""),
+        "lan": [f"http://{ip}:{PORT}/" for ip in local_ips() if not ip.startswith("127.")],
         "ets": {"sessions": ets_sessions["n"], "ready": bool((CFG.get("gateway_ip") or "").strip()) and bool(INSTALLER_PW or REMOTE_PW)},
     })
 

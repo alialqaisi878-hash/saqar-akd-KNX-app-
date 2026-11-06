@@ -133,7 +133,7 @@ public class ControlActivity extends Activity {
                         + "align-items:center;justify-content:center;height:100vh;text-align:center'><div dir='rtl'>"
                         + "<h2>ما يوصل للبيت</h2><p>تأكد من النت. دا يعيد المحاولة...</p></div></body></html>",
                         "text/html; charset=utf-8", "UTF-8");
-                ui.postDelayed(() -> web.loadUrl(url), 4000);
+                ui.postDelayed(() -> openBest(true), 4000);
             }
 
             @Override public void onPageFinished(WebView v, String u) {
@@ -160,7 +160,7 @@ public class ControlActivity extends Activity {
         gear.setTextSize(20);
         gear.setTextColor(Color.argb(120, 255, 255, 255));
         gear.setPadding(24, 12, 24, 12);
-        gear.setOnClickListener(v -> web.loadUrl(url));
+        gear.setOnClickListener(v -> openBest(true));
         gear.setOnLongClickListener(v -> {
             prefs.edit().remove("url").apply();
             showSetup();
@@ -168,11 +168,50 @@ public class ControlActivity extends Activity {
         });
         root.addView(gear, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START));
         setContentView(root);
-        web.loadUrl(url);
+        openBest(true);
+    }
+
+    private String current = "";
+
+    /** At home on the same Wi-Fi: talk to the house tablet directly (fast). Away: through the company server. */
+    private void openBest(boolean force) {
+        final String remote = prefs.getString("url", "");
+        if (prefs.getBoolean("local", false)) { if (force || current.isEmpty()) { current = remote; web.loadUrl(remote); } return; }
+        final String lans = prefs.getString("lan", "");
+        new Thread(() -> {
+            String pick = remote;
+            try {
+                org.json.JSONArray a = new org.json.JSONArray(lans.isEmpty() ? "[]" : lans);
+                for (int i = 0; i < a.length(); i++) {
+                    String u = a.getString(i);
+                    try {
+                        HttpURLConnection h = (HttpURLConnection) new URL(u + "ping").openConnection();
+                        h.setConnectTimeout(700);
+                        h.setReadTimeout(700);
+                        if (h.getResponseCode() == 200) { pick = u; break; }
+                    } catch (Exception ignored) { }
+                }
+            } catch (Exception ignored) { }
+            final String go = pick;
+            runOnUiThread(() -> {
+                if (!force && go.equals(current)) return;
+                current = go;
+                web.loadUrl(go);
+                if (!go.equals(remote)) Toast.makeText(this, "🏠 متصل مباشرة بالبيت (أسرع)", Toast.LENGTH_SHORT).show();
+            });
+        }).start();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (web != null && !current.isEmpty()) openBest(false);
     }
 
     /** What the house page may ask the app to do. */
     private class Js {
+        @android.webkit.JavascriptInterface public void setLan(String json) {
+            if (!json.equals(prefs.getString("lan", ""))) prefs.edit().putString("lan", json).apply();
+        }
         @android.webkit.JavascriptInterface public void geo(String json) {
             prefs.edit().putString("geo", json).remove("geo_last").apply();
             runOnUiThread(ControlActivity.this::askLocation);

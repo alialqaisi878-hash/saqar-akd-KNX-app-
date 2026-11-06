@@ -10,8 +10,8 @@ android {
         applicationId = "iq.saqar.knx"
         minSdk = 26
         targetSdk = 34
-        versionCode = 18
-        versionName = "4.0"
+        versionCode = 19
+        versionName = "4.1"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     // fixed company key from the CI secret, so updates install over the old app (falls back to the debug key)
