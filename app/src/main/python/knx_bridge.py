@@ -481,9 +481,98 @@ async def audio_do(aid: str, cmd: str, value=None) -> None:
     amp = next((a for a in audio_amps() if a["id"] == aid), None)
     if amp is None or audio_linkplay is None or audio_sess is None:
         raise ValueError("no such amplifier")
+    if cmd == "song":  # a file from the tablet's music folder
+        from urllib.parse import quote
+        name = os.path.basename(str(value or ""))
+        if not (MUSIC_DIR / name).is_file():
+            raise ValueError("song not found")
+        cmd, value = "url", lan_url_for(amp["ip"]) + "/music/" + quote(name)
     await audio_linkplay.control(audio_sess, amp["ip"], cmd, value)
     if audio_kick is not None:
         audio_kick.set()
+
+
+# music the owner uploads to the tablet; the amplifiers stream it over the LAN from /music/<file>
+MUSIC_DIR = DATA / "music"
+MUSIC_EXT = (".mp3", ".m4a", ".aac", ".flac", ".wav", ".ogg")
+
+
+def music_list() -> list[dict]:
+    if not MUSIC_DIR.is_dir():
+        return []
+    out = [{"file": f.name, "name": f.stem, "size": f.stat().st_size, "t": int(f.stat().st_mtime)}
+           for f in MUSIC_DIR.iterdir() if f.suffix.lower() in MUSIC_EXT]
+    return sorted(out, key=lambda x: -x["t"])
+
+
+def lan_url_for(amp_ip: str) -> str:
+    """The tablet's address as the amplifier sees it (same /24 when possible)."""
+    host = amp_ip.split(":")[0]
+    ips = [ip for ip in local_ips() if not ip.startswith("127.")] or ["127.0.0.1"]
+    same = [ip for ip in ips if ip.rsplit(".", 1)[0] == host.rsplit(".", 1)[0]]
+    return f"http://{(same or ips)[0]}:{PORT}"
+
+
+async def get_music(_req):
+    return web.json_response({"songs": music_list(), "stations": INTEG.get("stations", [])})
+
+
+async def upload_music(req):
+    """Owner adds songs (multipart, field 'file', several allowed)."""
+    MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+    reader = await req.multipart()
+    n = 0
+    async for part in reader:
+        fn = os.path.basename(part.filename or "")
+        stem, ext = os.path.splitext(fn)
+        if part.name != "file" or ext.lower() not in MUSIC_EXT:
+            continue
+        stem = re.sub(r'[\\/:*?"<>|#%&]+', " ", stem).strip()[:80] or "song"
+        dest = MUSIC_DIR / (stem + ext.lower())
+        i = 2
+        while dest.exists():
+            dest = MUSIC_DIR / f"{stem} ({i}){ext.lower()}"
+            i += 1
+        size = 0
+        with open(dest, "wb") as f:
+            while True:
+                chunk = await part.read_chunk(256 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > 60 * 1024 * 1024:
+                    f.close()
+                    dest.unlink(missing_ok=True)
+                    return web.json_response({"ok": False, "error": "الملف أكبر من 60 ميغا"}, status=413)
+                f.write(chunk)
+        n += 1
+    return web.json_response({"ok": True, "added": n, "songs": music_list()})
+
+
+async def delete_music(req):
+    name = os.path.basename(req.match_info["name"])
+    f = MUSIC_DIR / name
+    if f.is_file() and f.suffix.lower() in MUSIC_EXT:
+        f.unlink()
+    return web.json_response({"ok": True, "songs": music_list()})
+
+
+async def serve_music(req):
+    name = os.path.basename(req.match_info["name"])
+    f = MUSIC_DIR / name
+    if not f.is_file() or f.suffix.lower() not in MUSIC_EXT:
+        raise web.HTTPNotFound()
+    return web.FileResponse(f)
+
+
+async def put_stations(req):
+    """Owner's radio list: [{name, url}]"""
+    data = await req.json()
+    st = [{"name": str(x.get("name", ""))[:40] or "راديو", "url": str(x.get("url", "")).strip()[:500]}
+          for x in (data.get("stations") or [])[:40] if isinstance(x, dict) and str(x.get("url", "")).startswith(("http://", "https://"))]
+    INTEG["stations"] = st
+    INTEG_FILE.write_text(json.dumps(INTEG, ensure_ascii=False, indent=1), encoding="utf-8")
+    return web.json_response({"ok": True, "stations": st})
 
 
 async def get_audio(_req):
@@ -1962,6 +2051,11 @@ async def main() -> None:
         web.get("/api/discover/audio", discover_audio),
         web.get("/api/audio", get_audio),
         web.post("/api/audio/cmd", audio_cmd),
+        web.get("/api/music", get_music),
+        web.post("/api/music", upload_music),
+        web.delete("/api/music/{name}", delete_music),
+        web.put("/api/music/stations", put_stations),
+        web.get("/music/{name}", serve_music),
         web.put("/api/integrations", put_integrations),
         web.get("/tat-{n:(180|192|512)}.png", app_icon),
         web.put("/api/schedules", put_schedules),

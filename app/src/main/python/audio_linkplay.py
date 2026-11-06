@@ -82,6 +82,8 @@ async def control(sess: aiohttp.ClientSession, ip: str, cmd: str, value=None) ->
         await command(sess, ip, "setPlayerCmd:mute:%d" % (1 if value else 0))
     elif cmd == "src" and value in SOURCES:
         await command(sess, ip, "setPlayerCmd:switchmode:" + SOURCES[value])
+    elif cmd == "url" and str(value).startswith(("http://", "https://")):
+        await command(sess, ip, "setPlayerCmd:play:" + str(value), 6)
     elif cmd == "preset":
         await command(sess, ip, "MCUKeyShortClick:%d" % max(1, min(10, int(value))))
     else:
