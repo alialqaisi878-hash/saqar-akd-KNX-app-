@@ -230,6 +230,24 @@ def api(method: str, path: str, body: dict):
             CON.execute("DELETE FROM customers WHERE house=?", (str(body.get("house", "")),))
             CON.commit()
         return {"ok": True}
+    if path == "/api/house/forget" and method == "POST":
+        h = str(body.get("house", "")).strip().lower()
+        try:
+            r = remote("/admin/api/forget", {"house": h})
+        except urllib.error.HTTPError as e:
+            try:
+                return json.loads(e.read().decode("utf-8"))
+            except Exception:  # noqa: BLE001
+                return {"ok": False, "error": err_text(e)}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": err_text(e)}
+        if r.get("ok"):
+            add_log("forget", h)
+            if body.get("db"):
+                with lock:
+                    CON.execute("DELETE FROM customers WHERE house=?", (h,))
+                    CON.commit()
+        return r
     if path == "/api/notify":
         if method == "GET":
             try:
@@ -397,9 +415,10 @@ function edit(h){const d=$("#dlg");d.innerHTML=`<h2>${h.house?"زبون: <span c
  <label>اسم الزبون</label><input id="en" value="${esc(h.name)}"><label>الهاتف</label><input id="ep" class="ft" value="${esc(h.phone)}">
  <label>العنوان</label><input id="ea" value="${esc(h.address)}"><label>تاريخ التنصيب / الضمان</label><input id="ei" value="${esc(h.installed)}" placeholder="2026-11-07، ضمان سنتين">
  <label>ملاحظات (أجهزة، مشاكل، زيارات)</label><textarea id="eo">${esc(h.notes)}</textarea>
- <div class="row" style="margin-top:14px"><button class="b" id="es">حفظ</button><button class="g" id="ec">إلغاء</button>${h.house?`<button class="g" id="ed" style="margin-inline-start:auto;color:var(--bad)">حذف من القاعدة</button>`:""}</div>`;
+ <div class="row" style="margin-top:14px"><button class="b" id="es">حفظ</button><button class="g" id="ec">إلغاء</button>${h.house?`<button class="g" id="ed" style="margin-inline-start:auto;color:var(--bad)">حذف من القاعدة</button>`:""}${h.house&&!h.missing&&!h.online?`<button class="g" id="ef" style="color:var(--bad)">🗑 حذف البيت من السيرفر</button>`:""}</div>`;
  d.showModal();$("#ec").onclick=()=>d.close();
  $("#es").onclick=async()=>{const house=h.house||$("#eh").value.trim().toLowerCase();const r=await post("api/customer",{house,name:$("#en").value,phone:$("#ep").value,address:$("#ea").value,installed:$("#ei").value,notes:$("#eo").value});if(!r.ok){toast(r.error);return;}d.close();toast("انحفظ");cust();};
+ if($("#ef"))$("#ef").onclick=async()=>{if(!confirm("تحذف البيت "+h.house+" من السيرفر؟ رابطه يوكف واسمه يصير متاح. (معلومات الزبون بالقاعدة تنحذف هم)"))return;const r=await post("api/house/forget",{house:h.house,db:true});if(!r.ok){toast(r.error||"ما انحذف");return;}d.close();toast("انحذف");cust();};
  if(h.house)$("#ed").onclick=async()=>{if(!confirm("تحذف معلومات هذا الزبون من القاعدة؟ (البيت يبقى شغال)"))return;await post("api/customer/delete",{house:h.house});d.close();cust();};}
 async function notify(){if(!houses.length)await loadHouses();const r=await get("api/notify");const to=sel.size?[...sel]:"all";
  $("#m").innerHTML=`<h2>إشعار للزبائن</h2><div class="mut">يوصل كإشعار على تلفونات الزبائن (TAT SMART) وعلى شاشة البيت. البيت لازم يكون متصل.</div>

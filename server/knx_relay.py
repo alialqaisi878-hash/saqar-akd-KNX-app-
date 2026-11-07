@@ -261,7 +261,8 @@ let rows=[];
 async function load(){const r=await fetch("api/houses");if(r.status==401){location.reload();return;}rows=(await r.json()).houses;draw();}
 function draw(){const q=document.getElementById("q").value.trim().toLowerCase();
  document.getElementById("n").textContent=rows.length;document.getElementById("on").textContent=rows.filter(h=>h.online).length;document.getElementById("off").textContent=rows.filter(h=>!h.online).length;
- document.getElementById("t").innerHTML=rows.filter(h=>!q||h.house.includes(q)).map(h=>`<tr><td class="ft">${h.house}${h.v?` <span class="mut">v${h.v}</span>`:""}</td><td><span class="dot ${h.online?"on":"off"}"></span>${h.online?"متصل من "+ago(h.since):"غير متصل"}</td><td>${h.online?"—":ago(h.last)}</td><td><a href="${h.link}" target="_blank">فتح ↗</a></td></tr>`).join("");}
+ document.getElementById("t").innerHTML=rows.filter(h=>!q||h.house.includes(q)).map(h=>`<tr><td class="ft">${h.house}${h.v?` <span class="mut">v${h.v}</span>`:""}</td><td><span class="dot ${h.online?"on":"off"}"></span>${h.online?"متصل من "+ago(h.since):"غير متصل"}</td><td>${h.online?"—":ago(h.last)}</td><td><a href="${h.link}" target="_blank">فتح ↗</a>${h.online?"":` <button data-del="${h.house}" style="background:none;border:0;color:#f87171;cursor:pointer">حذف</button>`}</td></tr>`).join("");}
+document.getElementById("t").onclick=async e=>{const b=e.target.closest("[data-del]");if(!b||!confirm("تحذف البيت "+b.dataset.del+" من السيرفر؟ رابطه يوكف واسمه يصير متاح."))return;const r=await (await fetch("api/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({house:b.dataset.del})})).json();if(!r.ok)alert(r.error);load();};
 document.getElementById("q").oninput=draw;
 document.getElementById("ns").onclick=async()=>{const m=document.getElementById("nm").value.trim();if(!m)return;const r=await (await fetch("api/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({houses:"all",title:document.getElementById("nt").value,message:m})})).json();document.getElementById("nr").textContent=r.ok?"وصل لـ "+r.sent.length+" بيت، غير متصل "+r.offline.length:"ما وصل";};load();setInterval(load,10000);
 </script></main>"""
@@ -339,6 +340,27 @@ async def admin_notify(req: web.Request):
     lg.insert(0, {"t": int(time.time()), "title": title, "message": msg, "sent": sent, "offline": offline})
     NOTIFY_FILE.write_text(json.dumps(lg[:200], ensure_ascii=False), encoding="utf-8")
     return web.json_response({"ok": True, "sent": sent, "offline": offline})
+
+
+async def admin_forget(req: web.Request):
+    """Remove a house that is no longer used (old test, reinstalled tablet). Online houses are refused:
+    the tablet would just register again. Frees the name and drops its key."""
+    if not admin_ok(req):
+        return web.json_response({"error": "login"}, status=401)
+    d = await req.json()
+    h = str(d.get("house", "")).strip().lower()
+    if h in agents:
+        return web.json_response({"ok": False, "error": "البيت متصل هسه. طفّي KNX Prog بالبيت أو امسحه، وبعدين احذفه."}, status=409)
+    houses = load_houses()
+    seen = load_seen()
+    if h not in houses and h not in seen:
+        return web.json_response({"ok": False, "error": "ما موجود"}, status=404)
+    houses.pop(h, None)
+    seen.pop(h, None)
+    save_houses(houses)
+    SEEN_FILE.write_text(json.dumps(seen), encoding="utf-8")
+    log.info("house %s removed by admin", h)
+    return web.json_response({"ok": True})
 
 
 async def admin_page(req: web.Request):
@@ -449,6 +471,7 @@ def main() -> None:
         web.get(PREFIX + "/admin/api/houses", admin_houses),
         web.route("*", PREFIX + "/admin/api/release", admin_release),
         web.route("*", PREFIX + "/admin/api/notify", admin_notify),
+        web.post(PREFIX + "/admin/api/forget", admin_forget),
         web.get(PREFIX + "/release.json", release_get),
         web.get(PREFIX + "/privacy", privacy_page),
         web.get(PREFIX + "/demo", demo_page),
@@ -464,6 +487,7 @@ def main() -> None:
             web.get("/admin/api/houses", admin_houses),
             web.route("*", "/admin/api/release", admin_release),
             web.route("*", "/admin/api/notify", admin_notify),
+            web.post("/admin/api/forget", admin_forget),
             web.get("/release.json", release_get),
             web.get("/privacy", privacy_page),
             web.get("/demo", demo_page),
