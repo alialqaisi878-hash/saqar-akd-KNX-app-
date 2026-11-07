@@ -242,6 +242,7 @@ public class ControlActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (web != null && !current.isEmpty()) openBest(false);
+        if (Push.isOn(this)) { Push.start(this); keepAlertsAlive(); }
     }
 
     /** What the house page may ask the app to do. */
@@ -264,6 +265,7 @@ public class ControlActivity extends Activity {
                         && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                     requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 53);
                 Push.set(ControlActivity.this, topic == null ? "" : topic.trim(), on);
+                if (on) keepAlertsAlive();
             });
         }
         @android.webkit.JavascriptInterface public String pushState() {
@@ -275,6 +277,54 @@ public class ControlActivity extends Activity {
         @android.webkit.JavascriptInterface public String geoState() {
             return prefs.getString("geo", "").isEmpty() ? "off" : Geo.hasPermission(ControlActivity.this) ? "on" : "need_permission";
         }
+    }
+
+    /** Alerts must arrive with the app closed: ask once to be left out of battery saving, and on
+     *  Honor / Huawei / Xiaomi phones also open their own "auto launch" screen (they kill closed apps). */
+    private void keepAlertsAlive() {
+        if (prefs.getBoolean("alive_asked", false)) return;
+        prefs.edit().putBoolean("alive_asked", true).apply();
+        android.os.PowerManager pm = getSystemService(android.os.PowerManager.class);
+        boolean exempt = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        String maker = android.os.Build.MANUFACTURER.toLowerCase();
+        final boolean strict = maker.contains("honor") || maker.contains("huawei") || maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("oppo") || maker.contains("vivo") || maker.contains("realme");
+        if (exempt && !strict) return;
+        String msg = "حتى توصلك تنبيهات البيت والتطبيق مسدود، اسمح لـ TAT SMART يشتغل بالخلفية."
+                + (strict ? "\n\nبالشاشة الجاية فعّل TAT SMART، أو اختار (إدارة يدوية) وشغّل: التشغيل التلقائي، التشغيل الثانوي، والتشغيل بالخلفية." : "");
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("تنبيهات البيت")
+                .setMessage(msg)
+                .setPositiveButton("تمام", (d, w) -> {
+                    if (!exempt) {
+                        try {
+                            if ("play".equals(BuildConfig.STORE)) startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                            else startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+                        } catch (Exception ignored) { }
+                    }
+                    if (strict) web.postDelayed(this::openAutoStart, exempt ? 0 : 1500);
+                })
+                .setNegativeButton("بعدين", null)
+                .show();
+    }
+
+    private void openAutoStart() {
+        String[][] screens = {
+                {"com.hihonor.systemmanager", "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity"},
+                {"com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"},
+                {"com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity"},
+                {"com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"},
+                {"com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"},
+                {"com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"},
+        };
+        for (String[] s : screens) {
+            try {
+                startActivity(new Intent().setComponent(new android.content.ComponentName(s[0], s[1])).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return;
+            } catch (Exception ignored) { }
+        }
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+        } catch (Exception ignored) { }
     }
 
     private void askLocation() {

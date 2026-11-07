@@ -61,6 +61,21 @@ public class Push extends Service {
         }
     }
 
+    /** Wake up again after delayMs (also in Doze) and make sure the service is running. */
+    static void watchdog(Context c, long delayMs) {
+        try {
+            android.app.AlarmManager am = c.getSystemService(android.app.AlarmManager.class);
+            PendingIntent pi = PendingIntent.getBroadcast(c, 77, new Intent(c, PushKick.class),
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            if (!isOn(c)) { am.cancel(pi); return; }
+            long at = android.os.SystemClock.elapsedRealtime() + delayMs;
+            if (Build.VERSION.SDK_INT >= 23) am.setAndAllowWhileIdle(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
+            else am.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
+        } catch (Exception e) {
+            Log.w(TAG, "watchdog", e);
+        }
+    }
+
     static void channels(Context c) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = c.getSystemService(NotificationManager.class);
@@ -103,6 +118,7 @@ public class Push extends Service {
             worker = new Thread(this::loop, "tat-push");
             worker.start();
         }
+        watchdog(this, 15 * 60 * 1000L);
         return START_STICKY;
     }
 
@@ -154,7 +170,14 @@ public class Push extends Service {
         getSystemService(NotificationManager.class).notify(1000 + (id & 0xffff), n);
     }
 
+    /** The app was swiped away from recent apps: some phones (Honor, Huawei, Xiaomi) stop us with it. Come back. */
+    @Override public void onTaskRemoved(Intent rootIntent) {
+        watchdog(this, 2000);
+        super.onTaskRemoved(rootIntent);
+    }
+
     @Override public void onDestroy() {
+        if (isOn(this)) watchdog(this, 5000);
         running = false;
         if (worker != null) worker.interrupt();
         super.onDestroy();
