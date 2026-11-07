@@ -372,6 +372,44 @@ async def admin_houses(req: web.Request):
     out.sort(key=lambda x: (not x["online"], x["house"]))
     return web.json_response({"houses": out})
 
+PRIVACY_HTML = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TAT SMART - سياسة الخصوصية / Privacy Policy</title>
+<style>body{margin:0;background:#f3efe9;color:#23201c;font:16px/1.75 "Segoe UI",Tahoma,sans-serif}main{max-width:760px;margin:0 auto;padding:32px 20px 60px}
+h1{font-weight:500;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 6px}small{color:#7a7166}section{background:#fff;border-radius:18px;padding:8px 22px 18px;margin-top:22px}
+.en{direction:ltr;text-align:left}ul{padding-inline-start:20px}</style></head><body><main>
+<section><h1>سياسة الخصوصية لتطبيق TAT SMART</h1><small>آخر تحديث: 7 تشرين الثاني 2026 · الناشر: شركة TAT</small>
+<h2>شنو يسوي التطبيق</h2><p>TAT SMART يخليك تتحكم ببيتك الذكي (الإنارة، التبريد، الستائر، الأبواب، الصوت، الطاقة الشمسية، الكاميرات) اللي نصبته شركة TAT. التطبيق يتصل بجهاز البيت (التابلت) مباشرة على واي فاي البيت، أو عن طريق سيرفر الشركة من تكون برّا البيت.</p>
+<h2>المعلومات اللي نتعامل وياها</h2><ul>
+<li><b>اسم البيت وكلمة السر:</b> حتى تدخل لبيتك. كلمات السر محفوظة بجهاز البيت مو بالسيرفر.</li>
+<li><b>أوامر التحكم وحالة الأجهزة:</b> تمر عبر سيرفر الشركة حتى توصل للبيت، وما نخزنها.</li>
+<li><b>آخر اتصال ونسخة التطبيق لكل بيت:</b> نخزنها حتى نعرف البيت شغّال ونرسل التحديثات والصيانة.</li>
+<li><b>الموقع:</b> فقط إذا شغّلت بنفسك ميزة "من أوصل للبيت / من أطلع". الموقع يُفحص بالتلفون نفسه، وبس يرسل "وصل" أو "طلع" لبيتك. ما نخزن مكانك.</li>
+<li><b>الإشعارات:</b> تنرسل من جهاز بيتك للتلفون عن طريق خدمة إشعارات. محتواها عن بيتك بس (الباب، الطاقة، الحرارة).</li>
+<li><b>الصور والأغاني:</b> اللي ترفعها تنحفظ بجهاز البيت.</li></ul>
+<h2>شنو ما نسويه</h2><ul><li>ما نبيع معلوماتك ولا نشاركها للإعلانات.</li><li>ما بيه إعلانات ولا تتبع.</li><li>ما نطلع على الكاميرات. البث يروح منها لتلفونك بس.</li></ul>
+<h2>خدمات خارجية</h2><p>إذا الفني ربط بيتك وياها، التطبيق يستخدم: Tuya (أجهزة ذكية)، SolisCloud (الطاقة الشمسية)، radio-browser.info (الإذاعات)، ntfy.sh (الإشعارات)، Spotify (إذا تختاره أنت). كل وحدة منها إلها سياسة خصوصية خاصة بيها.</p>
+<h2>الحذف</h2><p>تكدر تطلب حذف بيانات بيتك من السيرفر بأي وقت، وراسلنا على الإيميل اللي تحت. ومن تمسح التطبيق تنمسح كل البيانات المخزونة بالتلفون.</p>
+<h2>الأطفال</h2><p>التطبيق لأصحاب البيوت وعوائلهم، وما يجمع معلومات خاصة بالأطفال.</p>
+<h2>تواصل ويانا</h2><p>info@saqar-akd.com.iq</p></section>
+<section class="en"><h1>TAT SMART Privacy Policy</h1><small>Last updated: 7 November 2026 · Publisher: TAT</small>
+<h2>What the app does</h2><p>TAT SMART lets you control the smart home installed by TAT (lights, climate, blinds, doors, audio, solar, cameras). It talks to the home's controller tablet on the home Wi-Fi, or through TAT's server when you are away.</p>
+<h2>Data we handle</h2><ul>
+<li><b>House name and password</b>, to sign in. Passwords are stored on the home controller, not on our server.</li>
+<li><b>Control commands and device states</b> pass through our server to reach your home. They are not stored.</li>
+<li><b>Last-seen time and app version per house</b>, kept for maintenance and updates.</li>
+<li><b>Location</b>, only if you turn on arrive/leave automations. It is checked on your phone; only an "arrived" or "left" event is sent to your home. We do not store your location.</li>
+<li><b>Notifications</b> about your own home are delivered through a notification service.</li>
+<li><b>Photos and songs</b> you upload are stored on your home controller.</li></ul>
+<h2>What we don't do</h2><ul><li>We do not sell or share your data for advertising.</li><li>No ads, no tracking.</li><li>We do not view your cameras; video goes from the camera to your phone.</li></ul>
+<h2>Third-party services</h2><p>When your installer connects them: Tuya, SolisCloud, radio-browser.info, ntfy.sh, and Spotify (only if you choose it). Each has its own privacy policy.</p>
+<h2>Deletion</h2><p>You can ask us to delete your home's data from our server at any time by email. Uninstalling the app removes everything stored on the phone.</p>
+<h2>Children</h2><p>The app is meant for homeowners and their families and does not collect data specifically from children.</p>
+<h2>Contact</h2><p>info@saqar-akd.com.iq</p></section></main></body></html>"""
+
+
+async def privacy_page(_req):
+    return web.Response(text=PRIVACY_HTML, content_type="text/html")
+
 
 async def root(_req):
     return web.Response(text="KNX relay OK")
@@ -391,6 +429,7 @@ def main() -> None:
         web.route("*", PREFIX + "/admin/api/release", admin_release),
         web.route("*", PREFIX + "/admin/api/notify", admin_notify),
         web.get(PREFIX + "/release.json", release_get),
+        web.get(PREFIX + "/privacy", privacy_page),
     ])
     if PREFIX:  # company-domain links without /knx
         app.add_routes([
@@ -403,6 +442,7 @@ def main() -> None:
             web.route("*", "/admin/api/release", admin_release),
             web.route("*", "/admin/api/notify", admin_notify),
             web.get("/release.json", release_get),
+            web.get("/privacy", privacy_page),
         ])
     admin_password()
     log.info("KNX relay listening on port %d", PORT)
