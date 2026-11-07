@@ -583,6 +583,19 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .hmrooms::-webkit-scrollbar{display:none}
 .hmrooms button{border:0;background:none;padding:8px 13px;border-radius:99px;font:inherit;font-size:.78rem;white-space:nowrap;color:#23201c;cursor:pointer;transition:background .3s,color .3s}
 .hmrooms button.on{background:#23201c;color:#fff}
+.lanbar{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));margin:0 auto;max-width:640px;z-index:90;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:16px;background:#3fd3a5;color:#06281d;box-shadow:0 10px 30px rgba(0,0,0,.35);font-size:.85rem}
+.lanbar span{flex:1;min-width:180px}.lanbar button{border:0;border-radius:10px;padding:8px 12px;font:inherit;font-weight:600;cursor:pointer;background:#06281d;color:#fff}.lanbar button[data-l="2"],.lanbar button[data-l="0"]{background:rgba(6,40,29,.15);color:#06281d}
+.flbar{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.flbar button{border:1px solid rgba(128,128,128,.25);background:rgba(128,128,128,.08);color:inherit;padding:6px 12px;border-radius:99px;font:inherit;font-size:.78rem;cursor:pointer;white-space:nowrap;transition:background .3s,color .3s}
+.flbar button.on{background:#3fd3a5;color:#06281d;border-color:#3fd3a5}
+.flbar button.ad{border-style:dashed}
+.hmfloors{position:absolute;top:84px;left:0;right:0;margin:0 auto;width:fit-content;padding:4px;border-radius:99px;opacity:0;transition:opacity .35s}
+.hmap.open .hmfloors{opacity:1}
+@media (max-width:760px){.hmfloors{top:74px}}
+#floorBar{margin:0 0 10px}
+@keyframes flIn{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes flInUp{from{opacity:0;transform:translateY(-18px) scale(.97)}to{opacity:1;transform:none}}
+.flswap{animation:flIn .5s cubic-bezier(.2,.8,.2,1)}.flswap.up{animation-name:flInUp}
 @media (prefers-reduced-motion:reduce){.hg{animation:none}.hmzoom{transition:none}}
 /* device popups match the warm design while the owner dashboard is open */
 body:has(#dash:not([hidden])) .scrim{--sheet:#fbf8f4;--ink:#23201c;--muted:#7a7166;--line:#e6ded3;--accent:#23201c;--accent-ink:#fff;--lit:#f0b65f;--lit-glow:rgba(240,182,95,.35);--chip:#efe9e1;color:#23201c;color-scheme:light;background:rgba(60,48,36,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -617,7 +630,7 @@ html[data-tat=dark] #dash .hbar{background:rgba(20,22,25,.95)}
 html[data-tat=dark] .dback{background:#1b1d20;color:#eceef0;border-color:rgba(255,255,255,.1)}
 html[data-tat=dark] #dash .dplan{background:linear-gradient(160deg,rgba(38,40,44,.8),rgba(22,24,27,.8))}
 html[data-tat=dark] .hmhint{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.08);color:#9aa0a6}
-html[data-tat=dark] .hplan>img{mix-blend-mode:normal;filter:invert(.9) hue-rotate(180deg) brightness(.92) contrast(.95);opacity:.92}
+html[data-tat=dark] .hplan>img{mix-blend-mode:normal;filter:none;opacity:1}
 html[data-tat=dark] .hg{mix-blend-mode:screen}
 html[data-tat=dark] .hp{background:rgba(40,43,47,.95);color:#a9afb5;border-color:rgba(255,255,255,.12);box-shadow:0 6px 14px -5px rgba(0,0,0,.8)}
 html[data-tat=dark] .hp.on{background:#3fd3a5;color:#06281d;border-color:#3fd3a5}
@@ -667,6 +680,7 @@ html[data-tat=dark] body:has(#dash:not([hidden])) .scrim .sheet{border-color:rgb
     <section class="stagewrap">
       <div class="viewbar"><p class="hint" id="hint" style="margin:0;flex:1"></p>
         <div class="seg" role="group" aria-label="العرض"><button id="vw2" aria-pressed="true">خريطة 2D</button><button id="vw3" aria-pressed="false">مجسم 3D</button></div></div>
+      <div class="flbar" id="floorBar"></div>
       <div class="stage" id="stage"></div>
       <div class="hint" style="margin:10px 0 0" id="planTools">
         <label class="btn" for="planFile">رفع خريطة (صورة أو PDF)</label>
@@ -836,7 +850,33 @@ async function putProject(){
 }
 function setSaved(){const t=document.getElementById("savedTag");if(t){t.textContent="✓ انحفظ "+new Date().toLocaleTimeString("ar-IQ",{hour:"2-digit",minute:"2-digit"});}}
 async function fetchProject(){const j=await fetch("api/project?wrap=1",{cache:"no-store"}).then(r=>r.json());if(j&&j.db){projRev=j.rev||"";return j.db;}return j;}
-const P=()=>db.projects.find(p=>p.id===db.current)||db.projects[0];
+const P=()=>{const p=db.projects.find(p=>p.id===db.current)||db.projects[0];if(p&&!p.floors)initFloors(p);return p;};
+/* ---------- floors: each floor has its own plan; p.plan/planW/planH always hold the floor on screen ---------- */
+function initFloors(p){p.floors=[{id:"f1",name:"الطابق الأرضي",plan:null,planW:0,planH:0}];p.floor="f1";}
+const onFl=(p,d)=>(d.floor||p.floors[0].id)===p.floor;
+const flDevs=p=>p.devices.filter(d=>onFl(p,d));
+function swapFloor(p,id){if(id===p.floor||!p.floors.some(f=>f.id===id))return false;
+ const cur=p.floors.find(f=>f.id===p.floor),t=p.floors.find(f=>f.id===id);
+ if(cur)Object.assign(cur,{plan:p.plan,planW:p.planW,planH:p.planH});
+ Object.assign(p,{plan:t.plan,planW:t.planW,planH:t.planH});t.plan=null;p.floor=id;if(view3d&&H3){H3.dispose();H3=null;}return true;}
+let flDir=0;
+function goFloor(id){const p=P();const i0=p.floors.findIndex(f=>f.id===p.floor),i1=p.floors.findIndex(f=>f.id===id);
+ if(!swapFloor(p,id))return;flDir=i1>i0?1:-1;if(role.installer)save();
+ if(HM.open){HM.ar=planAr(p);const pl=hmEl().querySelector(".hmzoom .hplan");pl.style.setProperty("--ar",HM.ar);hmRooms();hmapPaint();hmFloors();const b=hmBase();pl.style.width=b.bw+"px";hmFit();hmApply();flAnim(pl);}
+ render();renderDash();flAnim(document.querySelector("#dash .hmini .hplan"));flAnim(document.querySelector("#stage"));}
+function flAnim(el){if(!el)return;el.classList.remove("flswap","up");void el.offsetWidth;el.classList.add("flswap");if(flDir<0)el.classList.add("up");}
+function floorChips(p,edit){if(p.floors.length<2&&!edit)return "";
+ return p.floors.map(f=>`<button data-fl="${esc(f.id)}" class="${f.id===p.floor?"on":""}">${esc(f.name)}</button>`).join("")
+ +(edit?`<button class="ad" data-fladd>+ طابق</button><button data-flren title="تغيير الاسم">✎</button>${p.floors.length>1?`<button data-fldel title="حذف الطابق">🗑</button>`:""}`:"");}
+function floorAction(t){const q=s=>t.closest(s);let b;const p=P();
+ if(b=q("[data-fl]")){goFloor(b.dataset.fl);return true;}
+ if(q("[data-fladd]")){const n=prompt("اسم الطابق الجديد",["الطابق الأول","الطابق الثاني","السطح","السرداب"][p.floors.length-1]||"طابق");if(!n)return true;
+  const id="f"+uid();p.floors.push({id,name:n.trim(),plan:null,planW:0,planH:0});goFloor(id);toast("انضاف الطابق، ارفع خريطته من الزر تحت");return true;}
+ if(q("[data-flren]")){const f=p.floors.find(x=>x.id===p.floor);const n=prompt("اسم الطابق",f.name);if(n&&n.trim()){f.name=n.trim();save();render();renderDash();}return true;}
+ if(q("[data-fldel]")){const f=p.floors.find(x=>x.id===p.floor);const n=flDevs(p).length;
+  const other=p.floors.find(x=>x.id!==f.id);
+  if(!confirm("تحذف "+f.name+" وخريطته؟"+(n?"\n"+n+" جهاز بيه ينتقلون لـ "+other.name+".":"")))return true;flDevs(p).forEach(d=>d.floor=other.id);swapFloor(p,other.id);p.floors=p.floors.filter(x=>x.id!==f.id);save();render();renderDash();return true;}
+ return false;}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -934,6 +974,7 @@ function renderTop(){
  $("#hint").innerHTML=mode==="edit"
   ? (p.plan?`<b>وضع التعديل:</b> اضغط على أي مكان بالخريطة حتى تضيف جهاز، اسحب الأيقونة حتى تحركها، واضغط عليها حتى تعدلها.`:`<b>ابدأ برفع الخريطة</b> من الزر تحت.`)
   : `<b>وضع الاستخدام:</b> هيج يشوفها صاحب البيت. اضغط على الأيقونة حتى تتحكم. الأوامر تطلع بسجل الأوامر.`;
+ {const fb=$("#floorBar");fb.innerHTML=floorChips(p,mode==="edit"&&role.installer);fb.hidden=!fb.innerHTML;}
  $("#planInfo").textContent=p.plan?(p.sample?"الخريطة الحالية نموذج للتجربة":"الخريطة مرفوعة · "+p.planW+"×"+p.planH):"";
 }
 function renderStage(){
@@ -945,7 +986,7 @@ function renderStage(){
  if(H3){H3.dispose();H3=null;}
  if(!p.plan){st.innerHTML=`<div class="empty">ما بيه خريطة بعد. ارفع صورة أو PDF للبيت.</div>`;return;}
  st.style.aspectRatio=p.planW+"/"+p.planH;
- st.innerHTML=`<img src="${p.plan}" alt="خريطة ${esc(p.name)}">`+p.devices.map(markerHtml).join("");
+ st.innerHTML=`<img src="${p.plan}" alt="خريطة ${esc(p.name)}">`+flDevs(p).map(markerHtml).join("");
 }
 function isOn(d){return d.type==="blind"?(d.st.pos||0)<100&&(d.st.pos||0)>0?false:false:!!d.st.on;}
 function bound(d){return d.type==="tuya"?!!d.tuyaId:TYPES[d.type].fields.some(f=>d.ga&&d.ga[f[0]]);}
@@ -1002,6 +1043,7 @@ function render(){renderTop();renderStage();renderPane();}
 
 /* ---------- stage interactions ---------- */
 let drag=null;
+$("#floorBar").addEventListener("click",e=>floorAction(e.target));
 $("#stage").addEventListener("pointerdown",e=>{
  const p=P();if(!p.plan||view3d)return;
  const b=e.target.closest(".dev");
@@ -1125,7 +1167,7 @@ async function build3d(){
  const gtex=glowTex();const devG=new THREE.Group();scene.add(devG);const pick=[];
  const disp=o=>o.traverse(n=>{if(n.geometry)n.geometry.dispose();if(n.material){if(n.material.map&&n.material.map!==gtex)n.material.map.dispose();n.material.dispose();}});
  const makeDevs=()=>{disp(devG);devG.clear();pick.length=0;let lights=0;
-  P().devices.forEach(d=>{const x=-Wd/2+d.x/100*Wd,z=-Dp/2+d.y/100*Dp;const col=devColor(d);
+  flDevs(P()).forEach(d=>{const x=-Wd/2+d.x/100*Wd,z=-Dp/2+d.y/100*Dp;const col=devColor(d);
    const g=new THREE.Group();g.position.set(x,0,z);
    if(col){const lvl=d.type==="dimmer"||(d.type==="tuya"&&d.dimCode)?Math.max(.25,(d.st.level||0)/100):1;
     const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:gtex,color:new THREE.Color(col),transparent:true,opacity:(night?.95:.6)*lvl,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -1309,7 +1351,7 @@ function dashHome(){
 /* ===== house map: hero card + full screen map (zoom, pinch, drag, tap a device) ===== */
 function planAr(p){return p.planW&&p.planH?(p.planW/p.planH):1.5;}
 function planInner(p){
- const ds=p.devices.filter(d=>d.type!=="scene"&&d.x!=null&&d.y!=null);
+ const ds=flDevs(p).filter(d=>d.type!=="scene"&&d.x!=null&&d.y!=null);
  const glows=ds.filter(d=>isLight(d)&&d.st.on).map(d=>{const c=devColor(d);const lv=d.type==="dimmer"||d.dimCode?Math.max(.35,(d.st.level||100)/100):1;
   return `<i class="hg" style="left:${d.x}%;top:${d.y}%;--go:${lv};${c?`--gc:${c}99`:""}"></i>`;}).join("");
  return `<img src="${p.plan}" alt="">`+glows+ds.map(d=>{const on=isOnD(d)&&d.type!=="blind";
@@ -1318,7 +1360,7 @@ function planInner(p){
 function heroMap(p){
  const devs=p.devices,on=devs.filter(d=>isLight(d)&&d.st.on).length,all=devs.filter(isLight).length;
  return `<div class="dcard dhero dplan" data-hs="hero" data-hmap="1" role="button" tabindex="0" aria-label="افتح خريطة البيت">
-  <div class="hmh"><div><b>${esc(p.name||"البيت")}</b><small>${on?on+" ضوء شغّال من "+all:"كل الإنارة طافية"}</small></div><span class="sp"></span><span class="hmhint">⤢ دوس حتى تكبر</span></div>
+  <div class="hmh"><div><b>${esc(p.name||"البيت")}</b><small>${on?on+" ضوء شغّال من "+all:"كل الإنارة طافية"}</small></div><span class="sp"></span>${p.floors.length>1?`<span class="flbar" data-noopen>${floorChips(p,false)}</span>`:""}<span class="hmhint">⤢ دوس حتى تكبر</span></div>
   <div class="hmini"><div class="hplan" style="--ar:${planAr(p)}">${planInner(p)}</div></div></div>`;
 }
 var HM={open:false,Z:{x:0,y:0,z:1,bw:800},ar:1.5,room:null,ptr:new Map(),g:null,moved:false};
@@ -1329,7 +1371,7 @@ function hmEl(){let m=document.getElementById("hmap");if(m)return m;
  m.innerHTML=`<div class="hmview"><div class="hmzoom"><div class="hplan"></div></div></div>
  <div class="hmhd hmglass"><div><b id="hmT"></b><small id="hmC"></small></div><span class="sp"></span><button class="hmbtn" data-hmoff>طفّي كل الإنارة</button><button class="hmbtn dk" data-hmx aria-label="سد">✕</button></div>
  <div class="hmz hmglass"><button data-hz="1" aria-label="تكبير">+</button><button data-hz="-1" aria-label="تصغير">−</button><button data-hz="0" aria-label="كل البيت">⤢</button></div>
- <div class="hmrooms hmglass"></div>`;
+ <div class="hmrooms hmglass"></div><div class="hmfloors hmglass flbar" hidden></div>`;
  document.body.appendChild(m);
  const v=m.querySelector(".hmview"),z=m.querySelector(".hmzoom");
  const startG=()=>{const p=[...HM.ptr.values()],Z=HM.Z;if(p.length===1)HM.g={t:1,x0:p[0].x,y0:p[0].y,zx:Z.x,zy:Z.y};else if(p.length>=2){const [a,b]=p;HM.g={t:2,d0:Math.hypot(a.x-b.x,a.y-b.y)||1,px:((a.x+b.x)/2-Z.x)/Z.z,py:((a.y+b.y)/2-Z.y)/Z.z,z0:Z.z};}};
@@ -1347,6 +1389,7 @@ function hmEl(){let m=document.getElementById("hmap");if(m)return m;
   if(q("[data-hmoff]")){P().devices.filter(d=>isLight(d)&&d.st.on).forEach(d=>devSet(d,false));refresh();renderDash();toast("طفيت كل الإنارة");return;}
   if(b=q("[data-hz]")){const k=+b.dataset.hz;if(!k){hmRoom(null);return;}hmZoomAt(innerWidth/2,hmTop()+(innerHeight-hmTop()-hmBot())/2,HM.Z.z*(k>0?1.5:1/1.5));return;}
   if(b=q("[data-hr]")){hmRoom(b.dataset.hr||null);return;}
+  if(q("[data-fl]")){floorAction(t);return;}
   if(b=q(".hmview .hp")){if(HM.moved)return;const d=P().devices.find(x=>x.id===b.dataset.hd);if(!d)return;
    if(d.type==="switch"||(d.type==="tuya"&&!d.dimCode&&!tuyaFeat(d).temp&&!tuyaFeat(d).colour&&tuyaFeat(d).power==null)){devSet(d,!d.st.on);refresh();renderDash();}else operate(d);}});
  addEventListener("keydown",e=>{if(e.key==="Escape"&&HM.open&&!document.querySelector(".scrim:not([hidden])"))hmapClose();});
@@ -1360,18 +1403,20 @@ function hmClamp(){const Z=HM.Z,W=innerWidth,H=innerHeight,pw=Z.bw*Z.z,ph=pw/HM.
 function hmFit(){const b=hmBase();Object.assign(HM.Z,{bw:b.bw,x:b.x,y:b.y,z:1});}
 function hmZoomAt(cx,cy,k){const Z=HM.Z;k=hmCl(k,1,5);const px=(cx-Z.x)/Z.z,py=(cy-Z.y)/Z.z;Z.z=k;Z.x=cx-px*k;Z.y=cy-py*k;hmClamp();hmApply();}
 function hmRoom(r){HM.room=r;const m=hmEl();m.querySelectorAll("[data-hr]").forEach(b=>b.classList.toggle("on",(b.dataset.hr||null)===r));
- const ds=r?P().devices.filter(d=>d.room===r&&d.x!=null):[];if(!ds.length){hmFit();hmApply();return;}
+ const ds=r?flDevs(P()).filter(d=>d.room===r&&d.x!=null):[];if(!ds.length){hmFit();hmApply();return;}
  const Z=HM.Z,bh=Z.bw/HM.ar,xs=ds.map(d=>d.x/100*Z.bw),ys=ds.map(d=>d.y/100*bh),pad=Z.bw*.07;
  const x0=Math.min(...xs)-pad,x1=Math.max(...xs)+pad,y0=Math.min(...ys)-pad,y1=Math.max(...ys)+pad,W=innerWidth,H=innerHeight;
  const k=hmCl(Math.min((W-110)/(x1-x0),(H-hmTop()-hmBot()-40)/(y1-y0)),1,2.4);Z.z=k;Z.x=W/2-(x0+x1)/2*k;Z.y=hmTop()+(H-hmTop()-hmBot())/2-(y0+y1)/2*k;hmClamp();hmApply();}
 function hmapPaint(){if(!HM.open)return;const p=P(),m=hmEl();if(!p.plan){hmapClose();return;}
  const pl=m.querySelector(".hmzoom .hplan");pl.innerHTML=planInner(p);
  const on=p.devices.filter(d=>isLight(d)&&d.st.on).length;m.querySelector("#hmT").textContent=p.name||"البيت";m.querySelector("#hmC").textContent=on?on+" ضوء شغّال":"كل الإنارة طافية";}
+function hmRooms(){const p=P(),m=hmEl();HM.room=null;const rooms=roomsOf().filter(r=>flDevs(p).some(d=>d.room===r&&d.x!=null));
+ m.querySelector(".hmrooms").innerHTML=`<button class="on" data-hr="">${p.floors.length>1?"كل الطابق":"كل البيت"}</button>`+rooms.map(r=>`<button data-hr="${esc(r)}">${esc(r)}</button>`).join("");
+ m.querySelector(".hmrooms").hidden=!rooms.length;}
+function hmFloors(){const p=P(),m=hmEl(),f=m.querySelector(".hmfloors");f.innerHTML=floorChips(p,false);f.hidden=p.floors.length<2;}
 function hmapOpen(){const p=P();if(!p.plan||HM.open)return;const m=hmEl();HM.ar=planAr(p);HM.open=true;HM.room=null;
  const pl=m.querySelector(".hmzoom .hplan"),z=m.querySelector(".hmzoom");pl.style.setProperty("--ar",HM.ar);
- const rooms=roomsOf().filter(r=>p.devices.some(d=>d.room===r&&d.x!=null));
- m.querySelector(".hmrooms").innerHTML=`<button class="on" data-hr="">كل البيت</button>`+rooms.map(r=>`<button data-hr="${esc(r)}">${esc(r)}</button>`).join("");
- m.querySelector(".hmrooms").hidden=!rooms.length;
+ hmRooms();hmFloors();
  hmapPaint();const b=hmBase();pl.style.width=b.bw+"px";
  const src=document.querySelector("#dash .hmini .hplan"),r=src&&src.getBoundingClientRect();
  z.classList.add("live");if(r&&r.width){Object.assign(HM.Z,{x:r.left,y:r.top,z:r.width/b.bw,bw:b.bw});}else{hmFit();HM.Z.z=.9;}hmApply();
@@ -1463,7 +1508,7 @@ async function sendChat(text){
  else chatLog.push({role:"error",content:r.error||"صار خطأ"});
  renderDash();const box=$("#chatMsgs");if(box)box.scrollTop=box.scrollHeight;
 }
-async function reloadProject(){try{const s=await fetchProject();if(s&&s.projects&&s.projects.length){const old={};db.projects.forEach(p=>p.devices.forEach(d=>old[d.id]=d.st));db=s;db.projects.forEach(p=>p.devices.forEach(d=>{if(old[d.id])d.st=Object.assign({},d.st,old[d.id]);}));tuyaApply();render();renderDash();}}catch(e){}}
+async function reloadProject(){try{const s=await fetchProject();if(s&&s.projects&&s.projects.length){const keepF=P().floor,old={};db.projects.forEach(p=>p.devices.forEach(d=>old[d.id]=d.st));db=s;db.projects.forEach(p=>p.devices.forEach(d=>{if(old[d.id])d.st=Object.assign({},d.st,old[d.id]);}));if(keepF)swapFloor(P(),keepF);tuyaApply();render();renderDash();}}catch(e){}}
 function sceneAudioHtml(sc){
  if(audioZones===null||music===null)return `<div class="muted" style="font-size:.8rem">جاري تحميل الأمبليفايرات…</div>`;
  if(!audioZones.length)return `<div class="muted" style="font-size:.8rem">ما اكو أمبليفايرات مضافة.</div>`;
@@ -1997,6 +2042,7 @@ function dashClick(e){
  if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer){loadBInfo();loadHist();}if(k==="auto")loadAuto();renderDash();return;}
  if(b=q("#dLock")){$("#instBtn").click();return;}
  if(b=q("[data-go]")){dpage=b.dataset.go;renderDash();return;}
+ if(q("[data-fl]")&&floorAction(t))return;
  if(!homeEdit&&q("[data-hmap]")){hmapOpen();return;}
  if(b=q("[data-room]")){if(!b.dataset.room)return;droom=b.dataset.room;dpage="room";renderDash();return;}
  if(b=q("[data-dt]")){const d=P().devices.find(x=>x.id===b.dataset.dt);if(!d)return;
@@ -2152,6 +2198,7 @@ function editDevice(d,pos){
   sheet(`<header><h2>${isNew?"جهاز جديد":"تعديل الجهاز"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
   <div class="field"><label for="fName">الاسم اللي يشوفه صاحب البيت</label><input id="fName" value="${esc(draft.name)}" placeholder="مثلاً: سقف الصالة"></div>
   <div class="field"><label for="fRoom">الغرفة</label><input id="fRoom" list="roomDl" value="${esc(draft.room||"")}" placeholder="مثلاً: الصالة"><datalist id="roomDl">${[...new Set(P().devices.map(x=>x.room).filter(Boolean))].map(r=>`<option value="${esc(r)}">`).join("")}</datalist></div>
+  ${P().floors.length>1?`<div class="field"><label for="fFloor">الطابق</label><select id="fFloor">${P().floors.map(f=>`<option value="${esc(f.id)}"${(draft.floor||P().floor)===f.id?" selected":""}>${esc(f.name)}</option>`).join("")}</select></div>`:""}
   <div class="field"><label>النوع</label><div class="types">${Object.keys(TYPES).map(k=>`<button data-type="${k}" aria-pressed="${draft.type===k}">${I[k]}${TYPES[k].label}</button>`).join("")}</div></div>
   <div class="grid2">${T.fields.map(f=>`<div class="field"><label for="g_${f[0]}">${f[1]} <span class="mono">DPT ${f[2]}</span></label><input id="g_${f[0]}" class="mono" list="gaDl" value="${esc(draft.ga[f[0]]||"")}" placeholder="1/1/1" inputmode="numeric"><small class="muted" id="n_${f[0]}">${esc(gaName(draft.ga[f[0]]))}</small></div>`).join("")}
   ${draft.type==="scene"?`<div class="field"><label for="fScene">رقم السين</label><input id="fScene" type="number" min="1" max="64" value="${draft.sceneNo||1}"></div>`:""}</div>
@@ -2161,7 +2208,7 @@ function editDevice(d,pos){
   ${gaOptions()}
   <div class="actions">${isNew?"<span></span>":`<button class="btn danger" id="del">حذف</button>`}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="ok">حفظ</button></div></div>`,
   s=>{
-   const grab=()=>{draft.name=$("#fName").value.trim();draft.room=$("#fRoom").value.trim();
+   const grab=()=>{draft.name=$("#fName").value.trim();draft.room=$("#fRoom").value.trim();{const ff=$("#fFloor");if(ff)draft.floor=ff.value;}
     if(draft.type==="tuya"&&$("#tySel")&&$("#tySel").dataset.ready){const id=$("#tySel").value;const x=(tuyaList||[]).find(y=>y.id===id);draft.tuyaId=id||"";draft.tuyaName=x?x.name:"";draft.code=$("#tCode").value;const dc=$("#tDim").value;if(dc!==draft.dimCode){draft.dimCode=dc;const r=DIM_RANGE[dc]||[10,1000];draft.dimMin=r[0];draft.dimMax=r[1];}}T.fields.forEach(f=>{const v=($("#g_"+f[0]).value.match(/\d+\/\d+\/\d+/)||[""])[0];draft.ga[f[0]]=v;});const sc=$("#fScene");if(sc)draft.sceneNo=Math.max(1,Math.min(64,+sc.value||1));};
    s.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{grab();draft.type=b.dataset.type;draw();});
    T.fields.forEach(f=>{const inp=$("#g_"+f[0]);inp.oninput=()=>{const v=(inp.value.match(/\d+\/\d+\/\d+/)||[""])[0];$("#n_"+f[0]).textContent=gaName(v)||(v?"عنوان مو موجود بملف ETS":"");};});
@@ -2184,7 +2231,7 @@ function editDevice(d,pos){
     }).catch(e=>{sel.innerHTML=`<option value="${esc(draft.tuyaId||"")}">${esc(draft.tuyaName||"—")}</option>`;msg.textContent=e.message;msg.style.color="var(--danger)";});
    }
    $("#ok").onclick=()=>{grab();if(!draft.name)draft.name=TYPES[draft.type].label;const p=P();
-    if(isNew)p.devices.push(draft);else p.devices[p.devices.findIndex(x=>x.id===draft.id)]=draft;
+    if(isNew){if(draft.floor==null)draft.floor=p.floor;p.devices.push(draft);}else p.devices[p.devices.findIndex(x=>x.id===draft.id)]=draft;
     if(draft.type==="tuya")tuyaApply();
     save();close();renderStage();renderPane();toast(isNew?"انضاف الجهاز":"انحفظ");};
    const del=$("#del");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية للحذف";return;}
@@ -2403,6 +2450,13 @@ function hasPush(){return !!(window.TATApp&&TATApp.push&&TATApp.pushState);}
 (function(){if(CUSTOMER_APP&&window.TATApp&&TATApp.setLan&&location.protocol==="https:")fetch("api/bridge").then(r=>r.json()).then(b=>{if(b.lan&&b.lan.length)TATApp.setLan(JSON.stringify(b.lan));}).catch(()=>{});})();
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;if(CUSTOMER_APP){if(role.installer&&role.locked)fetch("api/installer/logout",{method:"POST"}).catch(()=>{});role={installer:false,locked:false};}}).catch(()=>{})
 .then(()=>fetchProject()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());openEditLink();});
+/* At home but opened the internet link? The tablet is on the same Wi-Fi: go to it directly (no trip through the server, faster). */
+async function lanCheck(){if(CUSTOMER_APP||location.protocol!=="https:")return;let j;try{j=await (await fetch("api/where",{cache:"no-store"})).json();}catch(e){return;}
+ if(!j||!j.home||!j.lan||!j.lan.length)return;const url=j.lan[0];let auto=false;try{auto=localStorage.getItem("tat-lan-auto")==="1";}catch(e){}
+ const go=()=>{location.href=url;};if(auto){toast("🏠 أنت بالبيت، أحولك للتابلت مباشرة (أسرع)");setTimeout(go,900);return;}
+ const d=document.createElement("div");d.className="lanbar";d.innerHTML=`<span>🏠 أنت بنفس شبكة البيت. افتح التابلت مباشرة حتى تصير الاستجابة فورية.</span><button data-l="1">افتح المباشر</button><button data-l="2">دائماً</button><button data-l="0" aria-label="سد">✕</button>`;
+ d.onclick=e=>{const b=e.target.closest("[data-l]");if(!b)return;if(b.dataset.l==="2"){try{localStorage.setItem("tat-lan-auto","1");}catch(_){}}if(b.dataset.l!=="0")go();d.remove();};document.body.appendChild(d);}
+setTimeout(lanCheck,1200);
 /* house link with ?edit=1 (the "✏ تعديل" button in TAT Admin): ask the technician password, then open edit mode */
 function openEditLink(){let e=false;try{e=new URLSearchParams(location.search).get("edit")==="1";}catch(_){}if(!e)return;
  if(role.installer){try{history.replaceState(null,"",location.pathname);}catch(_){}dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}mode="edit";renderDash();render();toast("وضع التعديل: كل تغيير ينحفظ وينعكس على التابلت والتلفونات");}

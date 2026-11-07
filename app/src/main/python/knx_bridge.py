@@ -1778,6 +1778,36 @@ async def bridge_info(_req):
     })
 
 
+# ---------------- same house Wi-Fi? send the browser straight to the tablet (no trip through the server) ----------------
+public_ip = {"ip": "", "t": 0}
+
+
+async def public_ip_loop() -> None:
+    """The house's internet address, to tell when a visitor of the house link is sitting at home."""
+    def get() -> str:
+        for url in ("https://api.ipify.org", "https://icanhazip.com"):
+            try:
+                with urllib.request.urlopen(url, timeout=8) as r:
+                    ip = r.read().decode().strip()
+                    if re.fullmatch(r"[0-9a-fA-F.:]{3,45}", ip):
+                        return ip
+            except Exception:  # noqa: BLE001
+                continue
+        return ""
+    while True:
+        ip = await asyncio.get_running_loop().run_in_executor(None, get)
+        if ip:
+            public_ip.update(ip=ip, t=time.time())
+        await asyncio.sleep(900 if ip else 120)
+
+
+async def where(req):
+    fwd = (req.headers.get("Cf-Connecting-Ip") or req.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    lan = [f"http://{ip}:{PORT}/" for ip in local_ips() if not ip.startswith("127.")]
+    home = bool(fwd and public_ip["ip"] and fwd == public_ip["ip"])
+    return web.json_response({"home": home, "remote": is_remote(req), "lan": lan if home or not is_remote(req) else []})
+
+
 async def request_update(req):
     """Technician: ask KNX Prog to fetch the newest version (the tablet still shows Android's install prompt)."""
     if not is_installer(req):
@@ -2345,6 +2375,7 @@ async def main() -> None:
         web.get("/ets", ets_tunnel),
         web.get("/api/project", get_project),
         web.get("/api/role", role),
+        web.get("/api/where", where),
         web.get("/api/bridge", bridge_info),
         web.get("/api/tuya/devices", tuya_devices),
         web.get("/api/tuya/spec", tuya_spec),
@@ -2404,6 +2435,7 @@ async def main() -> None:
     drop_sample_project()
     load_links()
     asyncio.create_task(schedule_loop())
+    asyncio.create_task(public_ip_loop())
     if tuya is not None:
         asyncio.create_task(tuya_loop())
     make_solis()
