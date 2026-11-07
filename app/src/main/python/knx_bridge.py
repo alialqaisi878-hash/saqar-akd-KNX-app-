@@ -1731,7 +1731,8 @@ def ota_fetch(forced: bool = False) -> int:
 
 
 async def ota_loop() -> None:
-    """Check every hour; a new version is applied at night (2-5) or right away when the technician asks."""
+    """Check every 10 minutes; a version released in TAT Admin is applied right away by itself
+    (no technician needed, the bridge restarts in a few seconds and open pages reload)."""
     global ota_kick
     ota_kick = asyncio.Event()
     if os.environ.get("KNX_WEB_VER") is None:
@@ -1754,13 +1755,13 @@ async def ota_loop() -> None:
         except Exception as err:  # noqa: BLE001
             ota_state["state"] = f"error: {err}"[:200]
             log.warning("online update check failed: %s", err)
-        if ota_state["new"] and (forced or 2 <= time.localtime().tm_hour < 5):
+        if ota_state["new"]:
             log.info("online update %s downloaded, restarting the bridge", ota_state["new"])
             if restart_evt is not None:
                 restart_evt.set()
             return
         try:
-            await asyncio.wait_for(ota_kick.wait(), 3600)
+            await asyncio.wait_for(ota_kick.wait(), 600)
         except asyncio.TimeoutError:
             pass
 
