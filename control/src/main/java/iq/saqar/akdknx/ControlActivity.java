@@ -143,6 +143,7 @@ public class ControlActivity extends Activity {
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        web.clearCache(true);  // always the page the house tablet has now (online updates), never an old saved copy
         // tells the page it runs inside TAT SMART: customer controls only, no technician login
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString() + " TATSMART");
         web.addJavascriptInterface(new Js(), "TATApp");

@@ -2118,7 +2118,9 @@ async def app_icon(req):
 
 
 async def index(_req):
-    return web.FileResponse(Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / "index.html")
+    # never let a phone's WebView keep an old copy of the page after an online update
+    return web.FileResponse(Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / "index.html",
+                            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
 
 # ---------------- online editing: revision check, automatic backups, change log, restore ----------------
