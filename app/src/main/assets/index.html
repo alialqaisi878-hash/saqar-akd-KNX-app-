@@ -1519,17 +1519,37 @@ function sceneAudioHtml(sc){
  if(audioZones===null||music===null)return `<div class="muted" style="font-size:.8rem">جاري تحميل الأمبليفايرات…</div>`;
  if(!audioZones.length)return `<div class="muted" style="font-size:.8rem">ما اكو أمبليفايرات مضافة.</div>`;
  const opt=a=>{const v=a?(!a.on?"off":a.src?"b:"+a.src:a.song?"s:"+a.song:a.url?"u:"+a.url:a.preset?"p:"+a.preset:"play"):"play";
+  const st=music.stations.slice();if(a&&a.url&&!st.some(x=>x.url===a.url))st.unshift({name:a.urlName||"إذاعة",url:a.url});
   return `<option value="play"${v==="play"?" selected":""}>كمّل الشي الشغّال</option><option value="off"${v==="off"?" selected":""}>إيقاف</option>`+
-  (music.songs.length?`<optgroup label="أغاني البيت">${music.songs.map(m=>`<option value="s:${esc(m.file)}"${v==="s:"+m.file?" selected":""}>${esc(m.name)}</option>`).join("")}</optgroup>`:"")+
-  (music.stations.length?`<optgroup label="راديو">${music.stations.map(st=>`<option value="u:${esc(st.url)}"${v==="u:"+st.url?" selected":""}>${esc(st.name)}</option>`).join("")}</optgroup>`:"")+
+  `<optgroup label="⭐ إذاعاتي">${st.length?st.map(x=>`<option value="u:${esc(x.url)}"${v==="u:"+x.url?" selected":""}>${esc(x.name)}</option>`).join(""):`<option disabled>(فارغة: دوّر من النت بالزر 🔍)</option>`}</optgroup>`+
+  (music.songs.length?`<optgroup label="🎵 أغانيك على التابلت">${music.songs.map(m=>`<option value="s:${esc(m.file)}"${v==="s:"+m.file?" selected":""}>${esc(m.name)}</option>`).join("")}</optgroup>`:"")+
   `<optgroup label="مصدر"><option value="b:bt"${v==="b:bt"?" selected":""}>بلوتوث (من التلفون)</option><option value="b:aux"${v==="b:aux"?" selected":""}>AUX</option></optgroup><optgroup label="مفضلات 4STREAM">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="p:${n}"${v==="p:"+n?" selected":""}>مفضلة ${n}</option>`).join("")}</optgroup>`;};
  return audioZones.map(z=>{const a=(sc.actions||[]).find(x=>x.audio===z.id);
-  return `<label style="flex-wrap:wrap"><input type="checkbox" data-sau="${esc(z.id)}" ${a?"checked":""}>🎵 ${esc(z.name)} <span class="muted">${esc(z.room||"")}</span>
-   <select data-sauw="${esc(z.id)}" style="width:auto;max-width:52%;padding:2px 6px;margin-inline-start:auto">${opt(a)}</select>
-   <input type="number" data-sauv="${esc(z.id)}" min="0" max="100" value="${a&&a.vol!=null?a.vol:""}" placeholder="صوت" style="width:64px;padding:2px 6px"></label>`;}).join("");
+  return `<label class="scrow"><input type="checkbox" data-sau="${esc(z.id)}" ${a?"checked":""}><span class="nm">🎵 ${esc(z.name)} <span class="muted">${esc(z.room||"")}</span></span>
+   <select data-sauw="${esc(z.id)}" style="max-width:46vw">${opt(a)}</select>
+   <input type="number" data-sauv="${esc(z.id)}" min="0" max="100" value="${a&&a.vol!=null?a.vol:""}" placeholder="صوت" style="width:64px;padding:5px 6px">
+</label>
+   <div style="padding:2px 0 8px"><button type="button" class="btn" data-sfind="${esc(z.id)}" style="padding:3px 12px;font-size:.78rem">🔍 اختار إذاعة من النت</button><div class="sres" data-sres="${esc(z.id)}"></div></div>`;}).join("");
 }
+/* scene sheet: find an internet radio for an amplifier, save it to "إذاعاتي" and pick it for the scene */
+const RADIO_CHIPS=[["قرآن","quran"],["فيروز","fairuz"],["أم كلثوم","kalthoum"],["العراق","iraq"],["طرب","tarab"],["أطفال","kids"]];
+async function sceneRadioClick(s,t){const q=x=>t.closest(x);let b;
+ if(b=q("[data-sfind]")){const z=b.dataset.sfind,box=s.querySelector(`[data-sres="${z}"]`);
+  box.innerHTML=`<form data-sform="${esc(z)}" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"><input data-sq placeholder="اسم الإذاعة أو المطرب" style="flex:1;min-width:140px"><button class="btn primary" style="padding:4px 12px">بحث</button></form><div style="display:flex;gap:4px;flex-wrap:wrap">${RADIO_CHIPS.map(([n,k])=>`<button type="button" class="btn" data-schip="${k}" data-z="${esc(z)}" style="padding:2px 9px;font-size:.75rem">${n}</button>`).join("")}</div><div data-slist></div>`;
+  box.querySelector("[data-sq]").focus();return true;}
+ if(b=q("[data-schip]")){sceneRadioSearch(s,b.dataset.z,b.dataset.schip,b.textContent);return true;}
+ if(b=q("[data-spick]")){const z=b.dataset.z,st={name:b.dataset.n,url:b.dataset.spick};
+  if(!music.stations.some(x=>x.url===st.url)){music.stations.push(st);fetch("api/music/stations",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({stations:music.stations})}).then(r=>r.json()).then(r=>{if(r.stations)music.stations=r.stations;}).catch(()=>{});}
+  const sel=s.querySelector(`[data-sauw="${z}"]`),grp=sel.querySelector('optgroup[label="⭐ إذاعاتي"]');
+  if(![...sel.options].some(o=>o.value==="u:"+st.url)){grp.querySelectorAll("option[disabled]").forEach(o=>o.remove());const o=document.createElement("option");o.value="u:"+st.url;o.textContent=st.name;grp.appendChild(o);}
+  sel.value="u:"+st.url;s.querySelector(`[data-sau="${z}"]`).checked=true;s.querySelector(`[data-sres="${z}"]`).innerHTML=`<div class="muted" style="font-size:.78rem;margin:4px 0">✓ اخترت ${esc(st.name)} وانحفظت بإذاعاتي</div>`;return true;}
+ return false;}
+async function sceneRadioSearch(s,z,qv,label){const box=s.querySelector(`[data-sres="${z}"] [data-slist]`);if(!box)return;box.innerHTML=`<div class="muted" style="font-size:.78rem;margin:6px 0">جاري البحث عن ${esc(label||qv)}…</div>`;
+ let r;try{r=await (await fetch("api/radio/search?"+new URLSearchParams({q:qv}))).json();}catch(e){r={stations:[]};}
+ const list=(r.stations||[]).slice(0,12);
+ box.innerHTML=list.length?list.map(st=>`<button type="button" class="btn" data-spick="${esc(st.url)}" data-n="${esc(st.name)}" data-z="${esc(z)}" style="display:block;width:100%;text-align:start;margin-top:4px;padding:6px 10px">▶ ${esc(st.name)} <span class="muted">${esc(st.country||"")}</span></button>`).join(""):`<div class="muted" style="font-size:.78rem;margin:6px 0">ما لگيت شي، جرب اسم ثاني.</div>`;}
 function sceneAudioRead(s){return [...s.querySelectorAll("[data-sau]")].filter(c=>c.checked).map(c=>{const id=c.dataset.sau,w=s.querySelector(`[data-sauw="${id}"]`).value,v=s.querySelector(`[data-sauv="${id}"]`).value;
- const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:"))a.url=w.slice(2);if(w.startsWith("p:"))a.preset=+w.slice(2);if(w.startsWith("b:"))a.src=w.slice(2);return a;});}
+ const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:")){a.url=w.slice(2);const o=s.querySelector(`[data-sauw="${id}"]`).selectedOptions[0];if(o)a.urlName=o.textContent;}if(w.startsWith("p:"))a.preset=+w.slice(2);if(w.startsWith("b:"))a.src=w.slice(2);return a;});}
 function editScene(id){
  const p=P();p.scenes=p.scenes||[];const old=p.scenes.find(s=>s.id===id);
  const sc=old?JSON.parse(JSON.stringify(old)):{id:uid(),name:"",icon:"sofa",actions:[]};
@@ -1546,6 +1566,8 @@ function editScene(id){
   <div class="field"><label>الصوت</label><div class="devpick" id="scAud" style="max-height:30vh">${sceneAudioHtml(sc)}</div></div>
   <div class="actions">${old?`<button class="btn danger" id="scDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="scOk">حفظ</button></div></div>`,s=>{
   s.querySelectorAll("[data-ic]").forEach(b=>b.onclick=()=>{sc.icon=b.dataset.ic;s.querySelectorAll("[data-ic]").forEach(x=>x.setAttribute("aria-pressed",x===b));if(!$("#scN").value)$("#scN").value=SCENE_ICONS.find(x=>x[0]===sc.icon)[1];});
+  const au=s.querySelector("#scAud");au.addEventListener("click",e=>{if(sceneRadioClick(s,e.target)&&e.target.closest("button"))e.preventDefault();});
+  au.addEventListener("submit",e=>{const f=e.target.closest("[data-sform]");if(!f)return;e.preventDefault();const v=f.querySelector("[data-sq]").value.trim();if(v)sceneRadioSearch(s,f.dataset.sform,v,v);});
   $("#scCap").onclick=()=>{devs.forEach(d=>{const cb=s.querySelector(`[data-sa="${d.id}"]`);cb.checked=true;s.querySelector(`[data-son="${d.id}"]`).value=isOnD(d)?"1":"0";const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv)lv.value=d.st.on?(d.st.level||100):"";});toast("انأخذ وضع كل الأجهزة هسة");};
   $("#scOk").onclick=()=>{sc.name=$("#scN").value.trim()||"مشهد";sc.actions=devs.filter(d=>s.querySelector(`[data-sa="${d.id}"]`).checked).map(d=>{const a={id:d.id,on:s.querySelector(`[data-son="${d.id}"]`).value==="1"};const lv=s.querySelector(`[data-slv="${d.id}"]`);if(lv&&lv.value)a.level=Math.max(1,Math.min(100,+lv.value));if(d.type==="blind")a.position=a.on?100:0;return a;}).concat(sceneAudioRead(s));
    if(!sc.actions.length){toast("اختار جهاز واحد على الأقل");return;}
