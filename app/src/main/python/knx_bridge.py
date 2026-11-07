@@ -2091,20 +2091,191 @@ async def index(_req):
     return web.FileResponse(Path(os.environ.get("KNX_BRIDGE_WEB") or HERE) / "index.html")
 
 
-async def get_project(_req):
-    if PROJECT_FILE.exists():
-        return web.Response(text=PROJECT_FILE.read_text(encoding="utf-8"), content_type="application/json")
-    return web.json_response({"projects": []})
+# ---------------- online editing: revision check, automatic backups, change log, restore ----------------
+HIST_DIR = DATA / "history"
+HIST_KEEP = 40          # backups kept
+HIST_EVERY = 10 * 60    # a new backup at most every 10 minutes while someone keeps editing
+HIST_LOG = HIST_DIR / "log.json"
+
+
+def proj_rev() -> str:
+    try:
+        return str(PROJECT_FILE.stat().st_mtime_ns)
+    except OSError:
+        return "0"
+
+
+def _proj_counts(db) -> dict:
+    out = {"devices": 0, "scenes": 0, "gas": 0, "rooms": set(), "names": set()}
+    for pr in (db or {}).get("projects", []) or []:
+        for d in pr.get("devices", []) or []:
+            out["devices"] += 1
+            out["names"].add(str(d.get("name") or d.get("id")))
+            if d.get("room"):
+                out["rooms"].add(str(d.get("room")))
+        out["scenes"] += len(pr.get("scenes", []) or [])
+        out["gas"] += len(pr.get("gas", []) or [])
+    return out
+
+
+def _change_summary(old, new) -> str:
+    a, b = _proj_counts(old), _proj_counts(new)
+    parts = []
+    for k, label in (("devices", "جهاز"), ("scenes", "مشهد"), ("gas", "عنوان")):
+        dlt = b[k] - a[k]
+        if dlt:
+            parts.append(("+" if dlt > 0 else "") + f"{dlt} {label}")
+    added = sorted(b["names"] - a["names"])[:3]
+    gone = sorted(a["names"] - b["names"])[:3]
+    if added:
+        parts.append("أضاف: " + "، ".join(added))
+    if gone:
+        parts.append("حذف: " + "، ".join(gone))
+    return " | ".join(parts) or "تعديل إعدادات"
+
+
+def _who(req) -> str:
+    name = (req.query.get("who") or "").strip()[:40]
+    where = "عن بعد" if is_remote(req) else "من البيت"
+    return f"{name} ({where})" if name else f"فني {where}"
+
+
+def drop_sample_project() -> None:
+    """Older versions seeded an example house ("demo", sample=True). New houses start empty; remove it once."""
+    try:
+        db = json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return
+    prs = db.get("projects") or []
+    keep = [p for p in prs if not (p.get("id") == "demo" and p.get("sample"))]
+    if len(keep) == len(prs):
+        return
+    hist_backup("قبل حذف البيت التجريبي", force=True)
+    if not keep:
+        keep = [{"id": "home", "name": "البيت", "plan": None, "planW": 0, "planH": 0, "gas": [], "devices": [], "scenes": []}]
+    db["projects"] = keep
+    if db.get("current") not in [p.get("id") for p in keep]:
+        db["current"] = keep[0]["id"]
+    PROJECT_FILE.write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+    log.info("removed the example house from project.json")
+
+
+def hist_list() -> list:
+    if not HIST_DIR.exists():
+        return []
+    return sorted((f for f in HIST_DIR.glob("p-*.json")), key=lambda f: f.name, reverse=True)
+
+
+def hist_backup(reason: str = "", force: bool = False) -> str | None:
+    """Copy the current project.json into DATA/history (throttled unless force)."""
+    if not PROJECT_FILE.exists():
+        return None
+    HIST_DIR.mkdir(parents=True, exist_ok=True)
+    files = hist_list()
+    if files and not force and time.time() - files[0].stat().st_mtime < HIST_EVERY:
+        return None
+    name = "p-" + time.strftime("%Y%m%d-%H%M%S") + ".json"
+    while (HIST_DIR / name).exists():  # two backups in the same second
+        time.sleep(1)
+        name = "p-" + time.strftime("%Y%m%d-%H%M%S") + ".json"
+    shutil.copyfile(PROJECT_FILE, HIST_DIR / name)
+    meta = HIST_DIR / (name[:-5] + ".txt")
+    meta.write_text(reason[:120], encoding="utf-8")
+    for f in hist_list()[HIST_KEEP:]:
+        f.unlink(missing_ok=True)
+        (HIST_DIR / (f.name[:-5] + ".txt")).unlink(missing_ok=True)
+    return name
+
+
+def hist_log_add(who: str, what: str) -> None:
+    try:
+        log = json.loads(HIST_LOG.read_text(encoding="utf-8")) if HIST_LOG.exists() else []
+    except Exception:  # noqa: BLE001
+        log = []
+    if log and log[-1].get("who") == who and log[-1].get("what") == what and time.time() - log[-1].get("t", 0) < 120:
+        log[-1]["t"] = int(time.time())  # same person repeating the same kind of edit: one line
+        log[-1]["n"] = log[-1].get("n", 1) + 1
+    else:
+        log.append({"t": int(time.time()), "who": who, "what": what})
+    HIST_DIR.mkdir(parents=True, exist_ok=True)
+    HIST_LOG.write_text(json.dumps(log[-200:], ensure_ascii=False), encoding="utf-8")
+
+
+async def get_project(req):
+    # ?wrap=1 -> {"rev": ..., "db": ...} (the relay only passes a few headers, so the revision travels in the body)
+    text = PROJECT_FILE.read_text(encoding="utf-8") if PROJECT_FILE.exists() else '{"projects": []}'
+    if req.query.get("wrap"):
+        text = '{"rev": "%s", "db": %s}' % (proj_rev() if PROJECT_FILE.exists() else "0", text)
+    return web.Response(text=text, content_type="application/json", headers={"Cache-Control": "no-store"})
 
 
 async def put_project(req):
     if not is_installer(req):
         return web.json_response({"ok": False, "error": "installer only"}, status=403)
     data = await req.text()
-    json.loads(data)  # validate
+    new = json.loads(data)  # validate
+    rev = req.query.get("rev")
+    if rev and rev != proj_rev():
+        # someone else (another technician, the customer, the wall screen) saved since this page loaded
+        return web.json_response({"ok": False, "conflict": True, "rev": proj_rev()}, status=409)
+    try:
+        old = json.loads(PROJECT_FILE.read_text(encoding="utf-8")) if PROJECT_FILE.exists() else {}
+    except Exception:  # noqa: BLE001
+        old = {}
+    who = _who(req)
+    what = _change_summary(old, new)
+    hist_backup(f"قبل تعديل {who}")
     PROJECT_FILE.write_text(data, encoding="utf-8")
     load_links()
-    return web.json_response({"ok": True})
+    hist_log_add(who, what)
+    broadcast({"t": "project", "by": req.query.get("c", "")})
+    return web.json_response({"ok": True, "rev": proj_rev()})
+
+
+async def get_history(req):
+    if not is_installer(req):
+        return web.json_response({"error": "installer only"}, status=403)
+    out = []
+    for f in hist_list():
+        meta = HIST_DIR / (f.name[:-5] + ".txt")
+        try:
+            c = _proj_counts(json.loads(f.read_text(encoding="utf-8")))
+        except Exception:  # noqa: BLE001
+            c = {"devices": 0, "scenes": 0}
+        out.append({"id": f.name, "t": int(f.stat().st_mtime), "size": f.stat().st_size,
+                    "devices": c["devices"], "scenes": c["scenes"],
+                    "note": meta.read_text(encoding="utf-8") if meta.exists() else ""})
+    try:
+        log = json.loads(HIST_LOG.read_text(encoding="utf-8")) if HIST_LOG.exists() else []
+    except Exception:  # noqa: BLE001
+        log = []
+    return web.json_response({"backups": out, "log": list(reversed(log))[:100]})
+
+
+async def history_action(req):
+    """POST {op: backup|restore, id}. A restore first saves the current setup, so it can be undone."""
+    if not is_installer(req):
+        return web.json_response({"error": "installer only"}, status=403)
+    body = await req.json()
+    who = _who(req)
+    if body.get("op") == "backup":
+        name = hist_backup(f"نسخة يدوية: {who}", force=True)
+        hist_log_add(who, "حفظ نسخة يدوية")
+        return web.json_response({"ok": bool(name), "id": name})
+    if body.get("op") == "restore":
+        fid = str(body.get("id") or "")
+        src = HIST_DIR / fid
+        if not re.fullmatch(r"p-\d{8}-\d{6}\.json", fid) or not src.exists():
+            return web.json_response({"ok": False, "error": "ما لگيت النسخة"}, status=404)
+        json.loads(src.read_text(encoding="utf-8"))
+        hist_backup(f"قبل الرجوع لنسخة {fid[2:-5]}", force=True)
+        shutil.copyfile(src, PROJECT_FILE)
+        os.utime(PROJECT_FILE, None)
+        load_links()
+        hist_log_add(who, "رجّع نسخة " + fid[2:-5])
+        broadcast({"t": "project", "by": ""})
+        return web.json_response({"ok": True, "rev": proj_rev()})
+    return web.json_response({"ok": False}, status=400)
 
 
 async def ws_handler(req):
@@ -2215,6 +2386,8 @@ async def main() -> None:
         web.post("/api/installer", installer_login),
         web.post("/api/installer/logout", installer_logout),
         web.put("/api/project", put_project),
+        web.get("/api/history", get_history),
+        web.post("/api/history", history_action),
         web.get("/ws", ws_handler),
     ])
     runner = web.AppRunner(app)
@@ -2228,6 +2401,7 @@ async def main() -> None:
     if CFG.get("open_browser", True):
         webbrowser.open(f"http://localhost:{PORT}")
     asyncio.create_task(knx_loop())
+    drop_sample_project()
     load_links()
     asyncio.create_task(schedule_loop())
     if tuya is not None:

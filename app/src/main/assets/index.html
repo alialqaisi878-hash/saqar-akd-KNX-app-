@@ -778,6 +778,7 @@ function samplePlan(){
  </svg>`;
  return {src:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg),w:W,h:H};
 }
+function emptyDb(){return {projects:[{id:"home",name:"البيت",plan:null,planW:0,planH:0,gas:[],devices:[],scenes:[]}],current:"home"};}
 function sampleProject(){
  const p=samplePlan();
  return {id:"demo",name:"بيت تجريبي · المنصور",plan:p.src,planW:p.w,planH:p.h,sample:true,
@@ -809,16 +810,32 @@ let mode="edit", tab="dev", gaFilter="";
 let role={installer:true,locked:false};
 const log=[];
 function load(){
- try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.projects&&s.projects.length)return s;}catch(e){}
- return {projects:[sampleProject()],current:"demo"};
+ /* a new house starts empty: no sample devices, the technician adds everything himself */
+ try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.projects){s.projects=s.projects.filter(p=>!(p.id==="demo"&&p.sample));if(s.projects.length){if(!s.projects.some(p=>p.id===s.current))s.current=s.projects[0].id;return s;}}}catch(e){}
+ return emptyDb();
 }
 let saveT;
 function save(){
  if(!role.installer)return;
  try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){}
  clearTimeout(saveT);
- saveT=setTimeout(()=>{fetch("api/project",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(db)}).catch(()=>toast("ما انحفظ على الحاسبة، تأكد إن برنامج الربط شغّال"));},400);
+ saveT=setTimeout(putProject,400);
 }
+/* online editing: every save carries the revision this page has; if someone else saved meanwhile the tablet says "conflict" */
+let projRev="",saveBusy=false,saveAgain=false;const CLIENT=Math.random().toString(36).slice(2,10);
+const techName=()=>{try{return localStorage.getItem("tat-tech")||"";}catch(e){return "";}};
+async function putProject(){
+ if(saveBusy){saveAgain=true;return;}saveBusy=true;
+ try{const r=await fetch(`api/project?rev=${encodeURIComponent(projRev)}&c=${CLIENT}&who=${encodeURIComponent(techName())}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(db)});
+  const j=await r.json().catch(()=>({}));
+  if(r.status===409){saveAgain=false;toast("⚠ أحد ثاني عدّل هذا البيت هسة، نزّلت آخر نسخة. عيد تعديلك الأخير");await reloadProject();}
+  else if(r.ok){if(j.rev)projRev=j.rev;setSaved();}
+  else toast("ما انحفظ ("+r.status+")");
+ }catch(e){toast("ما انحفظ على الحاسبة، تأكد إن برنامج الربط شغّال");}
+ saveBusy=false;if(saveAgain){saveAgain=false;putProject();}
+}
+function setSaved(){const t=document.getElementById("savedTag");if(t){t.textContent="✓ انحفظ "+new Date().toLocaleTimeString("ar-IQ",{hour:"2-digit",minute:"2-digit"});}}
+async function fetchProject(){const j=await fetch("api/project?wrap=1",{cache:"no-store"}).then(r=>r.json());if(j&&j.db){projRev=j.rev||"";return j.db;}return j;}
 const P=()=>db.projects.find(p=>p.id===db.current)||db.projects[0];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -865,7 +882,7 @@ function connect(){
   if(m.t==="status"){const was=knxState;knxState=m.state;setTag();if(m.state==="connected"&&m.detail==="routing"){const t=$("#connTag");t.textContent="متصل (Routing، غير مؤكد)";t.className="tag";}if(m.state==="error"&&m.detail)toast(m.detail);if(m.state==="connected"&&was!=="connected")ws.send(JSON.stringify({t:"read",gas:statusGas()}));}
   if(m.t==="tg")incoming(m);
   if(m.t==="tuya"){m.devices.forEach(x=>tuyaSt[x.id]=x);tuyaApply();renderStage();if(tab==="dev")renderPane();}
-  if(m.t==="project")reloadProject();
+  if(m.t==="project"&&!(m.by&&m.by===CLIENT))reloadProject();
   if(m.t==="schedules"){schedules=null;if(tab==="sch")renderPane();}
   if(m.t==="solar"){solarLive={configured:true,state:m.state,data:m.data};if(dashOn&&dpage==="solar")renderDash();}
   if(m.t==="cameras"){camList=null;if(dashOn&&dpage==="cams")renderDash();}
@@ -1446,7 +1463,7 @@ async function sendChat(text){
  else chatLog.push({role:"error",content:r.error||"صار خطأ"});
  renderDash();const box=$("#chatMsgs");if(box)box.scrollTop=box.scrollHeight;
 }
-async function reloadProject(){try{const s=await fetch("api/project").then(r=>r.json());if(s&&s.projects&&s.projects.length){const old={};db.projects.forEach(p=>p.devices.forEach(d=>old[d.id]=d.st));db=s;db.projects.forEach(p=>p.devices.forEach(d=>{if(old[d.id])d.st=Object.assign({},d.st,old[d.id]);}));tuyaApply();render();renderDash();}}catch(e){}}
+async function reloadProject(){try{const s=await fetchProject();if(s&&s.projects&&s.projects.length){const old={};db.projects.forEach(p=>p.devices.forEach(d=>old[d.id]=d.st));db=s;db.projects.forEach(p=>p.devices.forEach(d=>{if(old[d.id])d.st=Object.assign({},d.st,old[d.id]);}));tuyaApply();render();renderDash();}}catch(e){}}
 function sceneAudioHtml(sc){
  if(audioZones===null||music===null)return `<div class="muted" style="font-size:.8rem">جاري تحميل الأمبليفايرات…</div>`;
  if(!audioZones.length)return `<div class="muted" style="font-size:.8rem">ما اكو أمبليفايرات مضافة.</div>`;
@@ -1788,9 +1805,29 @@ ${busHtml()}
  <div class="dsec">🧩 قوالب البيوت</div>
  <div class="dcard mtop"><div class="dmut">صدّر هذا البيت كقالب (العناوين والأجهزة والمشاهد والغرف، بدون صور ولا كلمات سر)، واستورده ببيت مشابه وعدّل العناوين بس.</div>
   <div class="mbar" style="margin:0"><button class="dbtn" data-texp>⬇ تصدير قالب</button><label class="dbtn">⬆ استيراد قالب<input type="file" accept=".json,application/json" hidden data-timp></label></div></div>
+ ${histHtml()}
  <div class="dsec">إضافة عنوان</div>
  <div class="dcard mrow madd"><input data-keep id="mnA" placeholder="1/2/3" class="ft"><input data-keep id="mnN" placeholder="الاسم"><input data-keep id="mnD" placeholder="1.001" class="ft md"><button class="dbtn pri" data-gadd>إضافة</button></div>
  </div>`;}
+/* online editing: automatic backups, restore, who changed what */
+let histData=null;
+async function loadHist(){try{const r=await fetch("api/history",{cache:"no-store"});histData=r.ok?await r.json():{backups:[],log:[]};}catch(e){histData={backups:[],log:[]};}if(dashOn&&dpage==="maint")renderDash();}
+const hTime=t=>new Date(t*1000).toLocaleString("ar-IQ",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
+function histHtml(){const h=histData;
+ return `<div class="dsec">🕘 النسخ الاحتياطية وسجل التعديلات</div>
+ <div class="dcard mtop"><div class="dmut">كل ما تعدّل البيت (من البيت أو عن بعد) تنحفظ نسخة تلقائياً كل 10 دقايق، وتگدر ترجع لأي نسخة. إذا اثنين يعدلون سوة، البرنامج ينبهك وما يمسح شغل واحد.<br><span id="savedTag" class="dchip" style="margin-top:6px;display:inline-block">${projRev?"✓ متصل بآخر نسخة":""}</span></div>
+  <div class="mbar" style="margin:0"><input data-keep id="techName" placeholder="اسمك (يطلع بالسجل)" value="${esc(techName())}" style="max-width:170px"><button class="dbtn pri" data-hsnap>💾 احفظ نسخة هسة</button><button class="dbtn" data-hload>↻</button></div></div>
+ ${!h?`<div class="dcard"><div class="dmut">جاري التحميل…</div></div>`:`
+ <div class="dcard mlist">${h.backups.length?h.backups.map(b=>`<div class="mrow"><span class="ft">${hTime(b.t)}</span><span class="dmut" style="flex:1">${esc(b.note||"")} · ${b.devices} جهاز · ${b.scenes} مشهد</span><span class="mc"><button class="dbtn" data-hres="${esc(b.id)}">↩ رجّع هاي النسخة</button></span></div>`).join(""):`<div class="dmut">بعد ماكو نسخ. أول تعديل يسوي نسخة.</div>`}</div>
+ <div class="dsec">📝 منو عدّل وشوكت</div>
+ <div class="dcard mlist">${h.log.length?h.log.slice(0,40).map(l=>`<div class="mrow"><span class="ft">${hTime(l.t)}</span><b>${esc(l.who)}</b><span class="dmut" style="flex:1">${esc(l.what)}${l.n>1?` (×${l.n})`:""}</span></div>`).join(""):`<div class="dmut">السجل فارغ.</div>`}</div>`}`;}
+function histClick(t){const q=s=>t.closest(s);let b;
+ if(q("[data-hload]")){histData=null;renderDash();loadHist();return true;}
+ if(q("[data-hsnap]")){fetch(`api/history?who=${encodeURIComponent(techName())}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"backup"})}).then(r=>r.json()).then(j=>{toast(j.ok?"انحفظت نسخة":"ما صار");loadHist();}).catch(()=>toast("ما صار"));return true;}
+ if(b=q("[data-hres]")){if(!confirm("ترجع البيت لهاي النسخة؟ الوضع الحالي ينحفظ نسخة قبلها حتى تگدر ترجعله."))return true;
+  fetch(`api/history?who=${encodeURIComponent(techName())}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"restore",id:b.dataset.hres})}).then(r=>r.json()).then(async j=>{if(j.ok){if(j.rev)projRev=j.rev;await reloadProject();toast("رجعت النسخة");loadHist();}else toast(j.error||"ما صار");}).catch(()=>toast("ما صار"));return true;}
+ return false;}
+document.addEventListener("change",e=>{if(e.target&&e.target.id==="techName"){try{localStorage.setItem("tat-tech",e.target.value.trim());}catch(_){}}});
 function mntCapture(){const p=P();
  document.querySelectorAll("[data-gn]").forEach(i=>{const g=p.gas.find(x=>x.addr===i.dataset.gn);if(g)g.name=i.value.trim();});
  document.querySelectorAll("[data-gd]").forEach(i=>{const g=p.gas.find(x=>x.addr===i.dataset.gd);if(g)g.dpt=i.value.trim();});}
@@ -1951,13 +1988,13 @@ function dashClick(e){
  if(b=q("[data-bl]")){const d=P().devices.find(x=>x.id===b.dataset.bl);devSet(d,+b.dataset.v>0);refresh();renderDash();return;}
  if(b=q("[data-blstop]")){const d=P().devices.find(x=>x.id===b.dataset.blstop);telegram((d.ga||{}).stop,"1.017",1);return;}
  if(b=q("[data-adv]")){const d=P().devices.find(x=>x.id===b.dataset.adv);operate(d);return;}
- if(dpage==="maint"&&mntClick(t))return;
+ if(dpage==="maint"&&(histClick(t)||mntClick(t)))return;
  if(dpage==="auto"&&autoClick(t))return;
  if(dpage==="home"&&homeClick(t))return;
  if(b=q("[data-thm]")){document.documentElement.dataset.tat=b.dataset.thm;try{localStorage.setItem("tat-theme",b.dataset.thm);}catch(_){}renderDash();return;}
  if(b=q("[data-espan]")){energySpan=+b.dataset.espan;renderDash();return;}
  if(q("[data-noopen]")){return;}
- if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer)loadBInfo();if(k==="auto")loadAuto();renderDash();return;}
+ if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer){loadBInfo();loadHist();}if(k==="auto")loadAuto();renderDash();return;}
  if(b=q("#dLock")){$("#instBtn").click();return;}
  if(b=q("[data-go]")){dpage=b.dataset.go;renderDash();return;}
  if(!homeEdit&&q("[data-hmap]")){hmapOpen();return;}
@@ -2365,7 +2402,11 @@ function hasPush(){return !!(window.TATApp&&TATApp.push&&TATApp.pushState);}
  fetch("api/auto").then(r=>r.ok?r.json():null).then(a=>{const n=a&&a.notify;if(!n||!n.topic)return;if(n.on&&!off&&TATApp.pushState()==="off")TATApp.push(n.topic,true);else if(!n.on&&TATApp.pushState()!=="off")TATApp.push(n.topic,false);}).catch(()=>{});})();
 (function(){if(CUSTOMER_APP&&window.TATApp&&TATApp.setLan&&location.protocol==="https:")fetch("api/bridge").then(r=>r.json()).then(b=>{if(b.lan&&b.lan.length)TATApp.setLan(JSON.stringify(b.lan));}).catch(()=>{});})();
 fetch("api/role").then(r=>r.ok?r.json():null).then(r=>{if(r)role=r;if(CUSTOMER_APP){if(role.installer&&role.locked)fetch("api/installer/logout",{method:"POST"}).catch(()=>{});role={installer:false,locked:false};}}).catch(()=>{})
-.then(()=>fetch("api/project")).then(r=>r.json()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());});
+.then(()=>fetchProject()).then(s=>{if(s&&s.projects&&s.projects.length){db=s;}else if(role.installer){save();}}).catch(()=>{}).finally(()=>{applyRole();render();setTag();connect();loadSchedules().then(()=>renderDash());openEditLink();});
+/* house link with ?edit=1 (the "✏ تعديل" button in TAT Admin): ask the technician password, then open edit mode */
+function openEditLink(){let e=false;try{e=new URLSearchParams(location.search).get("edit")==="1";}catch(_){}if(!e)return;
+ if(role.installer){try{history.replaceState(null,"",location.pathname);}catch(_){}dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}mode="edit";renderDash();render();toast("وضع التعديل: كل تغيير ينحفظ وينعكس على التابلت والتلفونات");}
+ else if(role.locked)setTimeout(()=>$("#instBtn").click(),400);}
 })();
 </script>
 </body>
