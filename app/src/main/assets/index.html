@@ -1469,7 +1469,7 @@ function dashSettings(){
  const p=P(),br=p.brand||{};const devs=p.devices.slice().sort(byOrd);let sv=false;try{sv=localStorage.getItem("knx-saver");sv=sv?sv==="1":/^(127\.0\.0\.1|localhost)$/.test(location.hostname);}catch(e){}
  const th=document.documentElement.dataset.tat||"dark";
  return `<div class="dsec" style="margin-top:0">شكل التطبيق</div><div class="tatthm"><button data-thm="dark" aria-pressed="${th==="dark"}"><i style="background:linear-gradient(135deg,#1c1e21,#3fd3a5)"></i>غامق</button><button data-thm="warm" aria-pressed="${th==="warm"}"><i style="background:linear-gradient(135deg,#e6e0d8,#23201c)"></i>فاتح دافي</button></div>
- <div class="dsec">التحديثات</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1" class="dmut">البرنامج يتحدث وحده. تكدر تفحص هسة إذا اكو نسخة جديدة. <span id="updInfo"></span></div><button class="dbtn p" data-cupd>⟳ تحقق من التحديثات</button></div>
+ <div class="dsec">التحديثات</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1" class="dmut">البرنامج يتحدث وحده. تكدر تفحص هسة إذا اكو نسخة جديدة. <span id="updInfo"></span></div><button class="dbtn p" data-cupd>⟳ تحقق من التحديثات</button></div>${(window.TATApp&&TATApp.changeHouse)?'<div class="dsec">الاتصال بالبيت</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1" class="dmut">إذا علّق التطبيق اضغط إعادة الاتصال. ربط ببيت آخر يمسح ربط هذا البيت من الموبايل.</div><button class="dbtn" data-appre>🔄 إعادة الاتصال</button><button class="dbtn" data-apphouse>🏠 ربط ببيت آخر</button></div>':''}
  <div class="dsec">الصفحة الرئيسية</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px"><div style="flex:1" class="dmut">رتّب أقسام الرئيسية: كبّر وصغّر، صعّد ونزّل، وأخفي الي ما تحتاجه.</div><button class="dbtn p" data-hedit2>✏ تخصيص الرئيسية</button></div>
  <div class="dsec">الأجهزة: الاسم والمفضلة والترتيب</div>
  <div class="dcard" style="min-height:0;padding:8px">${devs.map((d,i)=>`<div class="setrow" data-sid="${d.id}"><button class="fav${d.fav?" on":""}" data-fav="${d.id}" aria-label="مفضلة">${DI.heart}</button>
@@ -2067,6 +2067,8 @@ function dashClick(e){
  if(b=q("[data-cupd]")){b.disabled=true;b.textContent="⟳ جاري الفحص…";fetch("api/update/check",{method:"POST"}).then(r=>r.json()).then(j=>{
    if(j.new&&j.new>j.ver)toast("اكو تحديث جديد، ينزل هسة والشاشة تتحدث وحدها خلال دقيقة");else if(j.state==="held")toast("ماكو تحديث منشور بعد، عندك آخر نسخة");else if(String(j.state||"").startsWith("error"))toast("ما گدر يفحص، تأكد من الإنترنت بالتابلت");else toast("عندك آخر نسخة ✓");
    const i=document.getElementById("updInfo");if(i)i.textContent="النسخة "+(j.ver||"—");}).catch(()=>toast("ما گدر يفحص")).finally(()=>{b.disabled=false;b.textContent="⟳ تحقق من التحديثات";});return;}
+ if(q("[data-appre]")){try{TATApp.reload();}catch(e){location.reload();}return;}
+ if(q("[data-apphouse]")){if(confirm("تريد تفك ربط هذا البيت وتربط ببيت آخر؟"))try{TATApp.changeHouse();}catch(e){}return;}
  if(q("[data-hedit2]")){dpage="home";homeEdit=true;renderDash();return;}
  if(dpage==="home"&&homeClick(t))return;
  if(b=q("[data-thm]")){document.documentElement.dataset.tat=b.dataset.thm;try{localStorage.setItem("tat-theme",b.dataset.thm);}catch(_){}renderDash();return;}

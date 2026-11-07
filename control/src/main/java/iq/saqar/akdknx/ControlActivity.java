@@ -128,7 +128,7 @@ public class ControlActivity extends Activity {
             showPanel();
         });
         l.addView(demo);
-        l.addView(text("للتجربة بدون بيت. حتى ترجع: اضغط مطوّل على ⚙.", 12, "#64748b"));
+        l.addView(text("للتجربة بدون بيت. حتى ترجع: الإعدادات ← ربط ببيت آخر.", 12, "#64748b"));
         setContentView(l);
     }
 
@@ -193,18 +193,6 @@ public class ControlActivity extends Activity {
         });
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView gear = new TextView(this);
-        gear.setText("⚙");
-        gear.setTextSize(20);
-        gear.setTextColor(Color.argb(120, 255, 255, 255));
-        gear.setPadding(24, 12, 24, 12);
-        gear.setOnClickListener(v -> openBest(true));
-        gear.setOnLongClickListener(v -> {
-            prefs.edit().remove("url").apply();
-            showSetup();
-            return true;
-        });
-        root.addView(gear, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START));
         setContentView(root);
         openBest(true);
     }
@@ -248,6 +236,18 @@ public class ControlActivity extends Activity {
 
     /** What the house page may ask the app to do. */
     private class Js {
+        /** Settings page: reconnect (picks home Wi-Fi or server again). */
+        @android.webkit.JavascriptInterface public void reload() {
+            runOnUiThread(() -> openBest(true));
+        }
+        /** Settings page: forget this house and show the "connect to house" screen. */
+        @android.webkit.JavascriptInterface public void changeHouse() {
+            runOnUiThread(() -> {
+                prefs.edit().remove("url").remove("lan").apply();
+                current = "";
+                showSetup();
+            });
+        }
         @android.webkit.JavascriptInterface public void setLan(String json) {
             if (!json.equals(prefs.getString("lan", ""))) prefs.edit().putString("lan", json).apply();
         }
