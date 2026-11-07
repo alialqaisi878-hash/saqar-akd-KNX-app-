@@ -1132,11 +1132,53 @@ def save_db(db: dict) -> None:
     broadcast({"t": "project"})
 
 
+AUDIO_STOP: dict = {}  # amp id -> task that pauses it when the scene's play time ends
+
+
+def audio_stop_later(amp: str, minutes: float) -> None:
+    old = AUDIO_STOP.pop(amp, None)
+    if old:
+        old.cancel()
+    if minutes and minutes > 0:
+        async def _stop():
+            await asyncio.sleep(minutes * 60)
+            AUDIO_STOP.pop(amp, None)
+            try:
+                await audio_do(amp, "pause")
+                log.info("audio %s: play time over, paused", amp)
+            except Exception as err:  # noqa: BLE001
+                log.warning("audio stop %s: %s", amp, err)
+        AUDIO_STOP[amp] = asyncio.ensure_future(_stop())
+
+
+async def scene_off(scene: dict) -> int:
+    """End of a schedule: switch off what the scene switched on and stop its music (blinds stay)."""
+    n = 0
+    for a in scene.get("actions", []):
+        try:
+            if a.get("audio"):
+                if a.get("on", True):
+                    audio_stop_later(a["audio"], 0)
+                    await audio_do(a["audio"], "pause")
+                    n += 1
+                continue
+            d = find_device(a.get("id", ""))
+            if d is None or not a.get("on") or d.get("type") in ("blind", "scene"):
+                continue
+            await run_action(d, False)
+            n += 1
+        except Exception as err:  # noqa: BLE001
+            log.warning("scene off %s: %s", scene.get("name"), err)
+        await asyncio.sleep(0.08)
+    return n
+
+
 async def run_scene_actions(scene: dict) -> int:
     n = 0
     for a in scene.get("actions", []):
         if a.get("audio"):  # {"audio": amp id, "cmd": play|pause|vol|src, "value": ...}
             try:
+                audio_stop_later(a["audio"], 0)
                 if not a.get("on", True):
                     await audio_do(a["audio"], "pause")
                 else:
@@ -1152,6 +1194,8 @@ async def run_scene_actions(scene: dict) -> int:
                         if a.get("src"):
                             await audio_do(a["audio"], "src", a["src"])
                         await audio_do(a["audio"], "play")
+                    if a.get("dur"):
+                        audio_stop_later(a["audio"], float(a["dur"]))
                 n += 1
             except Exception as err:  # noqa: BLE001
                 log.warning("scene %s: audio %s", scene.get("name"), err)
@@ -1430,6 +1474,25 @@ async def schedule_loop() -> None:
                 log.warning("holiday: %s", err)
             hm, wd = now.strftime("%H:%M"), (now.weekday() + 1) % 7  # 0 = Sunday
             for s in load_schedules():
+                end = str(s.get("end") or "")
+                if s.get("enabled", True) and end == hm:
+                    # the "off" time belongs to the day it started (an evening scene may end after midnight)
+                    start_wd = (wd - 1) % 7 if end < schedule_hm(s, sun) else wd
+                    if start_wd in (s.get("days") or [0, 1, 2, 3, 4, 5, 6]):
+                        try:
+                            if s.get("scene_id"):
+                                sc = find_scene(s["scene_id"])
+                                if sc:
+                                    await scene_off(sc)
+                                    log.info("schedule %s: scene %s off", s.get("name", ""), sc.get("name"))
+                            else:
+                                for dev_id in s.get("devices", []):
+                                    dev = find_device(dev_id)
+                                    if dev is not None:
+                                        await run_action(dev, not bool(s.get("on", True)))
+                                        await asyncio.sleep(0.1)
+                        except Exception as err:  # noqa: BLE001
+                            log.warning("schedule end %s: %s", s.get("name", ""), err)
                 if not s.get("enabled", True) or schedule_hm(s, sun) != hm:
                     continue
                 days = s.get("days") or [0, 1, 2, 3, 4, 5, 6]

@@ -143,6 +143,7 @@ button{cursor:pointer}
 .ct{background:linear-gradient(90deg,#ffb35c,#fff4e0,#cfe3ff);height:10px;border-radius:5px;margin-bottom:4px}
 .meter{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0;text-align:center}
 .meter div{background:var(--chip);border-radius:10px;padding:8px 4px}.meter b{display:block;font-family:var(--f-mono);font-size:1.05rem;color:var(--ink)}
+.schrow{min-height:0!important;margin-bottom:8px;display:flex;align-items:center;gap:12px}.schrow.off{opacity:.55}.schtm{display:flex;flex-direction:column;min-width:74px}.schtm b{font-size:1.05rem;font-variant-numeric:tabular-nums}.schtm small,.schtx small{font-size:.75rem;opacity:.7;display:block;line-height:1.5}.schtx{flex:1;min-width:0}.schtx b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sch{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
 .sch .tm{font-family:var(--f-mono);font-size:1.3rem;color:var(--ink)}.sch .tx{flex:1;font-size:.82rem;color:var(--muted)}
 .days{display:flex;gap:4px;flex-wrap:wrap}.days label{display:flex;align-items:center;gap:2px;font-size:.78rem;border:1px solid var(--line);border-radius:6px;padding:3px 6px}
@@ -926,7 +927,7 @@ function connect(){
   if(m.t==="tg")incoming(m);
   if(m.t==="tuya"){m.devices.forEach(x=>tuyaSt[x.id]=x);tuyaApply();renderStage();if(tab==="dev")renderPane();}
   if(m.t==="project"&&!(m.by&&m.by===CLIENT))reloadProject();
-  if(m.t==="schedules"){schedules=null;if(tab==="sch")renderPane();}
+  if(m.t==="schedules"){schedules=null;if(tab==="sch")renderPane();if(dashOn&&dpage==="scenes")renderDash();}
   if(m.t==="solar"){solarLive={configured:true,state:m.state,data:m.data};if(dashOn&&dpage==="solar")renderDash();}
   if(m.t==="cameras"){camList=null;if(dashOn&&dpage==="cams")renderDash();}
   if(m.t==="audio"){audioZones=m.zones||[];if(dashOn&&dpage==="audio")renderDash();}
@@ -1497,8 +1498,29 @@ function dashScenes(){
  return `<div class="dscenes" style="margin-bottom:16px">${sceneBtns()}</div>
   <div class="dsec"><span>المشاهد</span><span style="display:flex;gap:8px"><button class="dbtn" data-go="ai">✨ صمّم بالمساعد</button><button class="dbtn p" data-newscene="1">+ مشهد جديد</button></span></div>
   ${(p.scenes||[]).map(s=>`<div class="dcard" style="min-height:0;margin-bottom:10px;display:flex;align-items:center;gap:10px"><span style="width:24px;color:var(--d-acc)">${DI[s.icon]||DI.star}</span><div style="flex:1"><b>${esc(s.name)}</b><div class="dmut">${s.actions.length} جهاز</div></div><button class="dbtn" data-edscene="${s.id}">تعديل</button></div>`).join("")||`<div class="dempty">سوّي مشهد: شغّل الأضوية مثل ما تحبها، وبعدين "مشهد جديد" ← "خذ الوضع الحالي".</div>`}
-  <p class="dmut">تكدر تطلب من مصمم المشاهد: "سويلي مشهد سينما يطفي إنارة الصالة وينزل الستارة".</p>`;
+  <p class="dmut">تكدر تطلب من مصمم المشاهد: "سويلي مشهد سينما يطفي إنارة الصالة وينزل الستارة".</p>
+  ${dashSched()}`;
 }
+function schedWhat(s){const p=P();if(s.scene_id){const sc=(p.scenes||[]).find(x=>x.id===s.scene_id);return "مشهد "+(sc?sc.name:"(محذوف)");}
+ const names=(s.devices||[]).map(id=>(p.devices.find(x=>x.id===id)||{}).name).filter(Boolean);return actLabel(s)+": "+(names.join("، ")||"—");}
+function schedDays(s){return (s.days&&s.days.length&&s.days.length<7)?s.days.map(x=>DAYS[x]).join("، "):"كل يوم";}
+function dashSched(){
+ if(schedules===null){loadSchedules().then(()=>{if(dashOn&&dpage==="scenes")renderDash();});return `<div class="dsec">⏰ المواعيد</div><div class="dcard dmut">جاري التحميل…</div>`;}
+ return `<div class="dsec" style="margin-top:22px"><span>⏰ المواعيد</span><button class="dbtn p" data-sched="-1">+ موعد جديد</button></div>
+ <p class="dmut" style="margin:0 0 10px">الموعد يشغّل مشهد أو أجهزة بوقت، ويطفيها بوقت ثاني إذا تريد. يشتغل من التابلت بالبيت حتى لو التلفونات مسدودة.</p>
+ ${schedules.length?schedules.map((s,i)=>`<div class="dcard schrow${s.enabled===false?" off":""}"><button class="tgl${s.enabled!==false?" on":""}" data-schtog="${i}" aria-label="تفعيل"><i></i></button>
+  <div class="schtm"><b>${esc(whenText(s))}</b>${s.end?`<small>لحد ${esc(s.end)}</small>`:""}</div>
+  <div class="schtx"><b>${esc(s.name||schedWhat(s))}</b><small>${esc(s.name?schedWhat(s)+" · ":"")}${esc(schedDays(s))}</small></div>
+  <button class="dbtn" data-sched="${i}">تعديل</button></div>`).join(""):`<div class="dcard dmut" style="min-height:0">ماكو مواعيد بعد. مثلاً: مشهد الصبح يشتغل 7:00 ويطفي 8:00.</div>`}
+ <div class="dcard schrow" style="margin-top:10px"><button class="tgl${holiday.enabled?" on":""}" data-holtog aria-label="وضع السفر"><i></i></button>
+  <div class="schtx"><b>✈️ وضع السفر</b><small>لمن تكونون برة البيت، الإنارة المختارة تشتغل وتنطفي عشوائياً من الغروب لنص الليل، كأن أكو ناس بالبيت.</small></div>
+  <button class="dbtn" data-holed>اختيار الإنارة (${holiday.devices.length})</button></div>`;}
+function schedClick(t){const q=x=>t.closest(x);let b;
+ if(b=q("[data-sched]")){editSchedule(+b.dataset.sched);return true;}
+ if(b=q("[data-schtog]")){const s=schedules[+b.dataset.schtog];s.enabled=s.enabled===false;saveSchedules();renderDash();return true;}
+ if(q("[data-holtog]")){if(!holiday.enabled&&!holiday.devices.length){toast("اختار الإنارة أول");return true;}holiday.enabled=!holiday.enabled;saveSchedules();renderDash();toast(holiday.enabled?"وضع السفر شغّال":"انطفى وضع السفر");return true;}
+ if(q("[data-holed]")){holidayPick();return true;}
+ return false;}
 function dashChat(){
  return `<div class="chat"><div class="msgs" id="chatMsgs">${chatLog.length?chatLog.map(m=>`<div class="m ${m.role==="user"?"u":m.role==="error"?"e":"a"}">${esc(m.content)}</div>`).join(""):
   `<div class="m a">هلا بيك ✨ آني مصمم المشاهد. احچيلي شلون تريد الجو وأسويلك مشهد، مثلاً:\n• "سويلي مشهد سينما يطفي سقف الصالة ويخلي السبوت 20 ويسد الستارة"\n• "مشهد نوم يطفي كل إنارة البيت ويخلي الأباجورة 10"\n• "مشهد خطار للصالة"</div>`}
@@ -1530,7 +1552,7 @@ function sceneAudioHtml(sc){
    <select data-sauw="${esc(z.id)}" style="max-width:46vw">${opt(a)}</select>
    <input type="number" data-sauv="${esc(z.id)}" min="0" max="100" value="${a&&a.vol!=null?a.vol:""}" placeholder="صوت" style="width:64px;padding:5px 6px">
 </label>
-   <div style="padding:2px 0 8px"><button type="button" class="btn" data-sfind="${esc(z.id)}" style="padding:3px 12px;font-size:.78rem">🔍 اختار إذاعة من النت</button><div class="sres" data-sres="${esc(z.id)}"></div></div>`;}).join("");
+   <div style="padding:2px 0 8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn" data-sfind="${esc(z.id)}" style="padding:3px 12px;font-size:.78rem">🔍 اختار إذاعة من النت</button><label class="muted" style="font-size:.78rem;display:flex;align-items:center;gap:4px">⏱ يبقى شغّال<select data-saud="${esc(z.id)}" style="width:auto;padding:3px 6px;font-size:.8rem">${[[0,"لحد ما أطفيه"],[5,"5 دقايق"],[10,"10 دقايق"],[15,"ربع ساعة"],[30,"نص ساعة"],[45,"45 دقيقة"],[60,"ساعة"],[90,"ساعة ونص"],[120,"ساعتين"],[180,"3 ساعات"]].map(([v,n])=>`<option value="${v}"${(+(a&&a.dur)||0)===v?" selected":""}>${n}</option>`).join("")}</select></label></div><div class="sres" data-sres="${esc(z.id)}"></div></div>`;}).join("");
 }
 /* scene sheet: find an internet radio for an amplifier, save it to "إذاعاتي" and pick it for the scene */
 const RADIO_CHIPS=[["قرآن","quran"],["فيروز","fairuz"],["أم كلثوم","kalthoum"],["العراق","iraq"],["طرب","tarab"],["أطفال","kids"]];
@@ -1550,7 +1572,7 @@ async function sceneRadioSearch(s,z,qv,label){const box=s.querySelector(`[data-s
  const list=(r.stations||[]).slice(0,12);
  box.innerHTML=list.length?list.map(st=>`<button type="button" class="btn" data-spick="${esc(st.url)}" data-n="${esc(st.name)}" data-z="${esc(z)}" style="display:block;width:100%;text-align:start;margin-top:4px;padding:6px 10px">▶ ${esc(st.name)} <span class="muted">${esc(st.country||"")}</span></button>`).join(""):`<div class="muted" style="font-size:.78rem;margin:6px 0">ما لگيت شي، جرب اسم ثاني.</div>`;}
 function sceneAudioRead(s){return [...s.querySelectorAll("[data-sau]")].filter(c=>c.checked).map(c=>{const id=c.dataset.sau,w=s.querySelector(`[data-sauw="${id}"]`).value,v=s.querySelector(`[data-sauv="${id}"]`).value;
- const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:")){a.url=w.slice(2);const o=s.querySelector(`[data-sauw="${id}"]`).selectedOptions[0];if(o)a.urlName=o.textContent;}if(w.startsWith("p:"))a.preset=+w.slice(2);if(w.startsWith("b:"))a.src=w.slice(2);return a;});}
+ const a={audio:id,on:w!=="off"};if(v!=="")a.vol=Math.max(0,Math.min(100,+v));if(w.startsWith("s:"))a.song=w.slice(2);if(w.startsWith("u:")){a.url=w.slice(2);const o=s.querySelector(`[data-sauw="${id}"]`).selectedOptions[0];if(o)a.urlName=o.textContent;}if(w.startsWith("p:"))a.preset=+w.slice(2);if(w.startsWith("b:"))a.src=w.slice(2);const du=s.querySelector(`[data-saud="${id}"]`);if(du&&+du.value>0&&a.on)a.dur=+du.value;return a;});}
 function editScene(id){
  const p=P();p.scenes=p.scenes||[];const old=p.scenes.find(s=>s.id===id);
  const sc=old?JSON.parse(JSON.stringify(old)):{id:uid(),name:"",icon:"sofa",actions:[]};
@@ -2019,7 +2041,7 @@ function autoChange(t){if(t.id==="aRad"){auto.home.radius=+t.value;saveAuto();re
   sh("#rVw",["solar_export","battery_low","battery_full","temp_above","temp_below"].includes(ty));sh("#rDw",["temp_above","temp_below","ga_on","ga_off"].includes(ty));sh("#rWw",ty==="arrive"||ty==="leave");
   const ds=$("#rD");if(ds)[...ds.options].forEach(o=>{if(!o.dataset.k)return;o.hidden=ty.startsWith("temp")?o.dataset.k!=="t":o.dataset.k!=="b";});return true;}
  return false;}
-const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["audio","الصوت","music"],["scenes","المشاهد","scenes"],["ai","مصمم المشاهد","ai"],["auto","الأتمتة","bolt"],["map","الخريطة","map"],["maint","الصيانة","tool"],["settings","الإعدادات","gear"]];
+const DPAGES=[["home","الرئيسية","home"],["rooms","الغرف","rooms"],["light","الإنارة","light"],["ac","التبريد","ac"],["blind","الستائر","blind"],["solar","الطاقة","solar"],["cams","الكاميرات","cam"],["audio","الصوت","music"],["scenes","المشاهد والمواعيد","scenes"],["ai","مصمم المشاهد","ai"],["auto","الأتمتة","bolt"],["map","الخريطة","map"],["maint","الصيانة","tool"],["settings","الإعدادات","gear"]];
 function renderDash(){
  if(typeof HM!=="undefined"&&HM.open){if(!dashOn)hmapClose();else hmapPaint();}
  const el=$("#dash");if(!el)return;el.hidden=!dashOn;$("#dashBack").hidden=dashOn;if(!dashOn)return;
@@ -2028,13 +2050,13 @@ function renderDash(){
  if(lastDpage==="maint"&&role.installer&&document.querySelector("[data-gn]"))mntCapture();
  const draft=$("#chatIn")?$("#chatIn").value:"";
  const p=P(),now=new Date();const hr=now.getHours();const greet=hr<12?"صباح الخير":hr<18?"أهلاً":"مساء الخير";
- const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",audio:"الصوت",scenes:"المشاهد",ai:"مصمم المشاهد",auto:"الأتمتة",maint:"الصيانة"};
+ const titles={settings:"الإعدادات",home:greet,rooms:"الغرف",room:droom,light:"الإنارة",ac:"التبريد",blind:"الستائر",solar:"الطاقة الشمسية",cams:"الكاميرات",audio:"الصوت",scenes:"المشاهد والمواعيد",ai:"مصمم المشاهد",auto:"الأتمتة",maint:"الصيانة"};
  const body={home:dashHome,rooms:dashRooms,room:dashRoom,light:()=>grouped(p.devices.filter(isLight))+(p.devices.some(isPlug)?`<div class="dsec">مفاتيح وقواطع ذكية</div>`+tilesHtml(p.devices.filter(isPlug)):""),
   ac:()=>grouped(p.devices.filter(d=>d.type==="hvac")),blind:()=>grouped(p.devices.filter(d=>d.type==="blind")),solar:dashSolar,cams:dashCams,audio:dashAudio,scenes:dashScenes,ai:dashChat,auto:dashAuto,maint:dashMaint,settings:dashSettings}[dpage]||dashHome;
  const lightsOn=p.devices.filter(d=>isLight(d)&&d.st.on).length;
  const br=p.brand||{};
  el.innerHTML=`<nav class="dside"><div class="dbrand">${br.logo?`<img src="${br.logo}" alt="" style="height:34px;max-width:60px;object-fit:contain">`:DI.home}<span>${esc(br.name||p.name||"البيت")}</span></div>
-  ${DPAGES.filter(([k])=>k!=="maint"||role.installer).map(([k,n,ic])=>`<button class="dnav" data-dp="${k}" aria-current="${dpage===k||(dpage==="room"&&k==="rooms")}">${DI[ic]}${n}</button>`).join("")}
+  ${DPAGES.filter(([k])=>(k!=="maint"&&k!=="map")||role.installer).map(([k,n,ic])=>`<button class="dnav" data-dp="${k}" aria-current="${dpage===k||(dpage==="room"&&k==="rooms")}">${DI[ic]}${n}</button>`).join("")}
   <span class="sp"></span>${br.name?`<span class="dmut" style="padding:0 12px;font-size:.72rem">${esc(p.name||"")}</span>`:""}${role.locked?`<button class="dnav" id="dLock">${DI.lock}${role.installer?"خروج الفني":"الفني"}</button>`:""}</nav>
   <main class="dmain${dpage!==lastDpage?" enter":""}">${skyHtml()}${dpage==="home"?`<div class="dbrandtop"><img src="${br.logo||TAT_LOGO}" alt="TAT"><span class="clk" id="dClk">${clockText()}</span></div>`:""}<div class="dhead"><div><h1>${esc(titles[dpage]||"")}</h1><div class="sub">${dpage==="home"?esc(p.name||"")+" · "+now.toLocaleDateString("ar-IQ",{weekday:"long",day:"numeric",month:"long"}):dpage==="room"?`<a href="#" data-dp="rooms" style="color:var(--d-acc)">‹ كل الغرف</a>`:""}</div></div>
   <div class="dchips"><span class="dchip">💡 <b>${lightsOn}</b> شغّال</span><span class="dchip">${knxState==="connected"?"🟢 متصل":"🔴 غير متصل"}</span></div></div>${body()}</main>`;
@@ -2064,6 +2086,7 @@ function dashClick(e){
  if(b=q("[data-adv]")){const d=P().devices.find(x=>x.id===b.dataset.adv);operate(d);return;}
  if(dpage==="maint"&&(histClick(t)||mntClick(t)))return;
  if(dpage==="auto"&&autoClick(t))return;
+ if(dpage==="scenes"&&schedClick(t))return;
  if(b=q("[data-cupd]")){b.disabled=true;b.textContent="⟳ جاري الفحص…";fetch("api/update/check",{method:"POST"}).then(r=>r.json()).then(j=>{
    if(j.new&&j.new>j.ver)toast("اكو تحديث جديد، ينزل هسة والشاشة تتحدث وحدها خلال دقيقة");else if(j.state==="held")toast("ماكو تحديث منشور بعد، عندك آخر نسخة");else if(String(j.state||"").startsWith("error"))toast("ما گدر يفحص، تأكد من الإنترنت بالتابلت");else toast("عندك آخر نسخة ✓");
    const i=document.getElementById("updInfo");if(i)i.textContent="النسخة "+(j.ver||"—");}).catch(()=>toast("ما گدر يفحص")).finally(()=>{b.disabled=false;b.textContent="⟳ تحقق من التحديثات";});return;}
@@ -2162,7 +2185,7 @@ function renderSchedules(pane){
  pane.innerHTML=`<p class="muted">المواعيد تشتغل من التابليت بالبيت، حتى لو كل التلفونات مسدودة.</p>`+
   (schedules.length?schedules.map((s,i)=>{const names=(s.devices||[]).map(id=>(p.devices.find(x=>x.id===id)||{}).name).filter(Boolean);
    const days=(s.days&&s.days.length&&s.days.length<7)?s.days.map(x=>DAYS[x]).join("، "):"كل يوم";
-   return `<div class="sch"><span class="tm" style="${s.at&&s.at!=="time"?"font-size:.9rem":""}">${esc(whenText(s))}</span><span class="tx"><b style="color:var(--ink)">${esc(s.name||actLabel(s))}</b><br>${actLabel(s)}: ${esc(names.join("، ")||"—")}<br>${days}</span>
+   return `<div class="sch"><span class="tm" style="${s.at&&s.at!=="time"?"font-size:.9rem":""}">${esc(whenText(s))}</span><span class="tx"><b style="color:var(--ink)">${esc(s.name||actLabel(s))}</b><br>${esc(schedWhat(s))}${s.end?" · يطفي "+esc(s.end):""}<br>${days}</span>
    <label title="مفعّل"><input type="checkbox" data-en="${i}" ${s.enabled!==false?"checked":""}></label><button class="btn" data-ed="${i}">تعديل</button></div>`;}).join(""):`<p class="muted">ما بيه مواعيد بعد.</p>`)+
   `<button class="btn primary" id="addSch">+ موعد جديد</button>`+
   `<div class="sch" style="margin-top:14px;flex-wrap:wrap"><span class="tx"><b style="color:var(--ink)">✈️ وضع السفر</b><br>لمن تكونون برة البيت، الإنارة المختارة تشتغل وتنطفي بشكل عشوائي من الغروب لحد نص الليل، كأنه أكو ناس بالبيت.</span>
@@ -2171,37 +2194,49 @@ function renderSchedules(pane){
  pane.querySelectorAll("[data-ed]").forEach(b=>b.onclick=()=>editSchedule(+b.dataset.ed));
  $("#addSch").onclick=()=>editSchedule(-1);
  $("#holEn").onchange=()=>{if($("#holEn").checked&&!holiday.devices.length){$("#holEn").checked=false;toast("اختار الإنارة أول");return;}holiday.enabled=$("#holEn").checked;saveSchedules();toast(holiday.enabled?"وضع السفر شغّال":"انطفى وضع السفر");};
- $("#holEd").onclick=()=>{const devs=P().devices.filter(d=>["switch","dimmer","tuya"].includes(d.type));
-  sheet(`<header><h2>إنارة وضع السفر</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
-   <div class="devpick" style="max-height:50vh">${devs.map(d=>`<label><input type="checkbox" data-hv="${d.id}" ${holiday.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span></label>`).join("")}</div>
-   <div class="actions"><span></span><button class="btn primary" id="holOk">حفظ</button></div>`,()=>{
-   $("#holOk").onclick=()=>{holiday.devices=[...document.querySelectorAll("[data-hv]:checked")].map(c=>c.dataset.hv);if(!holiday.devices.length)holiday.enabled=false;saveSchedules();close();renderPane();};});};
+ $("#holEd").onclick=holidayPick;
 }
+function holidayPick(){const devs=P().devices.filter(d=>["switch","dimmer","tuya"].includes(d.type));
+ sheet(`<header><h2>إنارة وضع السفر</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+  <div class="devpick" style="max-height:50vh">${devs.map(d=>`<label><input type="checkbox" data-hv="${d.id}" ${holiday.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span></label>`).join("")||"<span class='muted'>ما بيه إنارة</span>"}</div>
+  <div class="actions"><span></span><button class="btn primary" id="holOk">حفظ</button></div>`,()=>{
+  $("#holOk").onclick=()=>{holiday.devices=[...document.querySelectorAll("[data-hv]:checked")].map(c=>c.dataset.hv);if(!holiday.devices.length)holiday.enabled=false;saveSchedules();close();schedRefresh();};});
+}
+function schedRefresh(){if(tab==="sch")renderPane();if(dashOn)renderDash();}
 function editSchedule(i){
- const s=i>=0?JSON.parse(JSON.stringify(schedules[i])):{id:uid(),name:"",time:"19:00",on:true,days:[0,1,2,3,4,5,6],devices:[],enabled:true};
- const devs=P().devices.filter(schedulable);
+ const p=P(),scenes=p.scenes||[];
+ const s=i>=0?JSON.parse(JSON.stringify(schedules[i])):{id:uid(),name:"",time:"19:00",on:true,days:[0,1,2,3,4,5,6],devices:[],enabled:true,scene_id:scenes.length?scenes[0].id:""};
+ const devs=p.devices.filter(d=>schedulable(d)&&d.type!=="scene");
+ const what=s.scene_id?"sc:"+s.scene_id:"dev";
  sheet(`<header><h2>${i>=0?"تعديل الموعد":"موعد جديد"}</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
-  <div class="grid2"><div class="field"><label for="sName">الاسم (اختياري)</label><input id="sName" value="${esc(s.name)}" placeholder="مثلاً: إنارة المسا"></div>
-  <div class="field"><label for="sAt">متى</label><select id="sAt"><option value="time">بوقت محدد</option><option value="sunset" ${s.at==="sunset"?"selected":""}>🌇 وقت الغروب${sunT.sunset?" (اليوم "+sunT.sunset+")":""}</option><option value="sunrise" ${s.at==="sunrise"?"selected":""}>🌅 وقت الشروق${sunT.sunrise?" (اليوم "+sunT.sunrise+")":""}</option></select></div></div>
-  <div class="grid2"><div class="field" id="fTime"><label for="sTime">الوقت</label><input id="sTime" type="time" value="${esc(s.time)}"></div>
-  <div class="field" id="fOff"><label for="sOffs">قبل/بعد (دقايق)</label><input id="sOffs" type="number" step="5" value="${+s.offset||0}" placeholder="مثلاً -15 يعني قبل ربع ساعة"></div></div>
-  <div class="field"><label>شنو يسوي</label><div class="big"><button id="sOn" class="${s.on?"active":""}">تشغيل</button><button id="sOff" class="${!s.on?"active":""}">إطفاء</button></div></div>
-  <div class="field"><label>الأيام</label><div class="days">${DAYS.map((n,k)=>`<label><input type="checkbox" data-day="${k}" ${s.days.includes(k)?"checked":""}>${n}</label>`).join("")}</div></div>
-  <div class="field"><label>الأجهزة</label><div class="devpick">${devs.map(d=>`<label><input type="checkbox" data-dv="${d.id}" ${s.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">· ${TYPES[d.type].label}</span></label>`).join("")||"<span class='muted'>ما بيه أجهزة</span>"}</div></div>
-  <p class="note">الستارة: تشغيل = تنزل، إطفاء = تصعد. السين يشتغل بس ويا "تشغيل".</p>
+  <div class="field"><label for="sName">الاسم (اختياري)</label><input id="sName" value="${esc(s.name||"")}" placeholder="مثلاً: صباح الخير"></div>
+  <div class="field"><label for="sWhat">شنو يشغّل</label><select id="sWhat">${scenes.map(x=>`<option value="sc:${esc(x.id)}"${what==="sc:"+x.id?" selected":""}>🎬 مشهد ${esc(x.name)}</option>`).join("")}<option value="dev"${what==="dev"?" selected":""}>💡 أجهزة أختارها</option></select></div>
+  <div id="fDev"><div class="field"><label>تشغيل لو إطفاء</label><div class="big"><button type="button" id="sOn" class="${s.on!==false?"active":""}">تشغيل</button><button type="button" id="sOff" class="${s.on===false?"active":""}">إطفاء</button></div></div>
+   <div class="field"><label>الأجهزة</label><div class="devpick">${devs.map(d=>`<label><input type="checkbox" data-dv="${d.id}" ${(s.devices||[]).includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">· ${esc(d.room||TYPES[d.type].label)}</span></label>`).join("")||"<span class='muted'>ما بيه أجهزة</span>"}</div></div></div>
+  <div class="grid2"><div class="field"><label for="sAt">يشتغل</label><select id="sAt"><option value="time">بوقت محدد</option><option value="sunset" ${s.at==="sunset"?"selected":""}>🌇 الغروب${sunT.sunset?" ("+sunT.sunset+")":""}</option><option value="sunrise" ${s.at==="sunrise"?"selected":""}>🌅 الشروق${sunT.sunrise?" ("+sunT.sunrise+")":""}</option></select></div>
+   <div class="field" id="fTime"><label for="sTime">الساعة</label><input id="sTime" type="time" value="${esc(s.time||"19:00")}"></div>
+   <div class="field" id="fOff"><label for="sOffs">قبل/بعد (دقايق)</label><input id="sOffs" type="number" step="5" value="${+s.offset||0}" placeholder="-15 = قبل ربع ساعة"></div></div>
+  <div class="grid2"><div class="field"><label for="sEndOn">يطفي</label><select id="sEndOn"><option value="">لا، يبقى</option><option value="1"${s.end?" selected":""}>بوقت محدد</option></select></div>
+   <div class="field" id="fEnd"><label for="sEnd">ساعة الإطفاء</label><input id="sEnd" type="time" value="${esc(s.end||"23:00")}"></div></div>
+  <div class="field"><label>الأيام</label><div class="days">${DAYS.map((n,k)=>`<label><input type="checkbox" data-day="${k}" ${(s.days||[]).includes(k)?"checked":""}>${n}</label>`).join("")}</div></div>
+  <p class="note" id="sNote"></p>
   <div class="actions">${i>=0?`<button class="btn danger" id="sDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="sOk">حفظ</button></div></div>`,()=>{
-  const atSync=()=>{const a=$("#sAt").value;$("#fTime").hidden=a!=="time";$("#fOff").hidden=a==="time";};$("#sAt").onchange=atSync;atSync();
+  const sync=()=>{const a=$("#sAt").value,w=$("#sWhat").value;$("#fTime").hidden=a!=="time";$("#fOff").hidden=a==="time";$("#fEnd").hidden=!$("#sEndOn").value;$("#fDev").hidden=w!=="dev";
+   $("#sNote").textContent=w==="dev"?"الستارة: تشغيل = تنزل، إطفاء = تصعد. وقت الإطفاء يرجّع الأجهزة بالعكس.":"وقت الإطفاء يطفي أجهزة المشهد ويوقف الصوت.";};
+  ["#sAt","#sWhat","#sEndOn"].forEach(x=>$(x).onchange=sync);sync();
   $("#sOn").onclick=()=>{s.on=true;$("#sOn").classList.add("active");$("#sOff").classList.remove("active");};
   $("#sOff").onclick=()=>{s.on=false;$("#sOff").classList.add("active");$("#sOn").classList.remove("active");};
-  $("#sOk").onclick=()=>{s.name=$("#sName").value.trim();s.time=$("#sTime").value||"19:00";s.at=$("#sAt").value;s.offset=Math.max(-180,Math.min(180,+$("#sOffs").value||0));
+  $("#sOk").onclick=()=>{const w=$("#sWhat").value;s.name=$("#sName").value.trim();s.time=$("#sTime").value||"19:00";s.at=$("#sAt").value;s.offset=Math.max(-180,Math.min(180,+$("#sOffs").value||0));
+   s.end=$("#sEndOn").value?($("#sEnd").value||""):"";if(!s.end)delete s.end;
    s.days=[...document.querySelectorAll("[data-day]:checked")].map(c=>+c.dataset.day);
-   s.devices=[...document.querySelectorAll("[data-dv]:checked")].map(c=>c.dataset.dv);
-   if(!s.devices.length){toast("اختار جهاز واحد على الأقل");return;}
+   if(w==="dev"){delete s.scene_id;s.on=s.on!==false;s.devices=[...document.querySelectorAll("[data-dv]:checked")].map(c=>c.dataset.dv);if(!s.devices.length){toast("اختار جهاز واحد على الأقل");return;}}
+   else{s.scene_id=w.slice(3);s.on=true;s.devices=[];}
    if(!s.days.length){toast("اختار يوم واحد على الأقل");return;}
+   if(s.end&&s.at==="time"&&s.end===s.time){toast("وقت الإطفاء نفس وقت التشغيل");return;}
    if(i>=0)schedules[i]=s;else schedules.push(s);
-   const key=x=>x.at==="sunrise"?(sunT.sunrise||"06:00"):x.at==="sunset"?(sunT.sunset||"17:00"):x.time;schedules.sort((a,b)=>key(a).localeCompare(key(b)));saveSchedules();close();renderPane();toast("انحفظ الموعد");};
+   const key=x=>x.at==="sunrise"?(sunT.sunrise||"06:00"):x.at==="sunset"?(sunT.sunset||"17:00"):x.time;schedules.sort((a,b)=>key(a).localeCompare(key(b)));saveSchedules();close();schedRefresh();toast("انحفظ الموعد");};
   const del=$("#sDel");if(del)del.onclick=()=>{if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="اضغط مرة ثانية للحذف";return;}
-   schedules.splice(i,1);saveSchedules();close();renderPane();toast("انحذف الموعد");};
+   schedules.splice(i,1);saveSchedules();close();schedRefresh();toast("انحذف الموعد");};
  });
 }
 let allOffT;
@@ -2436,7 +2471,7 @@ function applyRole(){
  ["#mEdit","#newProj","#planTools","#tGa"].forEach(q=>{const el=$(q);if(el)el.hidden=!inst;});
  const seg=$("#mEdit")&&$("#mEdit").parentElement;if(seg)seg.hidden=!inst;
  const b=$("#instBtn");b.hidden=!role.locked;b.textContent=inst?"🔓 خروج الفني":"🔒";b.title="الفني";
- if(!inst){mode="use";if(tab==="ga")tab="dev";}
+ if(!inst){mode="use";if(tab==="ga")tab="dev";if(!dashOn){dashOn=true;renderDash();}}
 }
 $("#instBtn").onclick=async()=>{
  if(role.installer){await fetch("api/installer/logout",{method:"POST"}).catch(()=>{});location.reload();return;}
