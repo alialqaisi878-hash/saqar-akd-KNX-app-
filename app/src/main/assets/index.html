@@ -1388,7 +1388,9 @@ function hmEl(){let m=document.getElementById("hmap");if(m)return m;
   if(q("[data-hmx]")){hmapClose();return;}
   if(q("[data-hmoff]")){P().devices.filter(d=>isLight(d)&&d.st.on).forEach(d=>devSet(d,false));refresh();renderDash();toast("طفيت كل الإنارة");return;}
   if(b=q("[data-hz]")){const k=+b.dataset.hz;if(!k){hmRoom(null);return;}hmZoomAt(innerWidth/2,hmTop()+(innerHeight-hmTop()-hmBot())/2,HM.Z.z*(k>0?1.5:1/1.5));return;}
-  if(b=q("[data-hr]")){hmRoom(b.dataset.hr||null);return;}
+  if(b=q("[data-hr]")){const r=b.dataset.hr||null;if(!r){hmRoom(null);return;}
+   /* a room chip opens that room's page (its photo and all its devices) */
+   hmapClose();droom=r;dpage="room";dashOn=true;renderDash();return;}
   if(q("[data-fl]")){floorAction(t);return;}
   if(b=q(".hmview .hp")){if(HM.moved)return;const d=P().devices.find(x=>x.id===b.dataset.hd);if(!d)return;
    if(d.type==="switch"||(d.type==="tuya"&&!d.dimCode&&!tuyaFeat(d).temp&&!tuyaFeat(d).colour&&tuyaFeat(d).power==null)){devSet(d,!d.st.on);refresh();renderDash();}else operate(d);}});
