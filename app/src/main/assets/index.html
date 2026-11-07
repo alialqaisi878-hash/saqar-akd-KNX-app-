@@ -131,7 +131,7 @@ button{cursor:pointer}
 .x{border:0;background:var(--chip);width:32px;height:32px;border-radius:50%;flex:none}
 .field{display:flex;flex-direction:column;gap:4px}
 .field label{font-size:.82rem;color:var(--muted)}
-.field input,.field select{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+.field input,.field select{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
 .field input.mono{text-align:left}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .types{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px}
@@ -146,10 +146,13 @@ button{cursor:pointer}
 .sch{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
 .sch .tm{font-family:var(--f-mono);font-size:1.3rem;color:var(--ink)}.sch .tx{flex:1;font-size:.82rem;color:var(--muted)}
 .days{display:flex;gap:4px;flex-wrap:wrap}.days label{display:flex;align-items:center;gap:2px;font-size:.78rem;border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.devpick label.scrow{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)}
+.devpick label.scrow:last-child{border-bottom:0}.devpick label.scrow input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.devpick label.scrow select{width:auto;padding:5px 8px}.devpick label.scrow .nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .devpick{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px}.devpick label{display:flex;gap:6px;align-items:center;padding:3px 0;font-size:.85rem}
 #allOff.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 select{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
-.types button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.75rem}
+.types button{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.75rem}
 .types button svg{width:20px;height:20px}
 .types button[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--sheet));color:var(--ink);font-weight:600}
 .actions{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
@@ -645,7 +648,7 @@ html[data-tat=dark] .hmbtn.dk{background:#3fd3a5;border-color:#3fd3a5;color:#062
 html[data-tat=dark] .hmz button,html[data-tat=dark] .hmrooms button{color:#eceef0}
 html[data-tat=dark] .hmrooms button.on{background:#3fd3a5;color:#06281d}
 html[data-tat=dark] .hmzoom.zl .hp .lb{background:rgba(30,32,35,.95);color:#eceef0}
-html[data-tat=dark] body:has(#dash:not([hidden])) .scrim{--sheet:#1c1e21;--ink:#eceef0;--muted:#8b9197;--line:#2e3236;--accent:#3fd3a5;--accent-ink:#06281d;--chip:#26292d;color:#eceef0;color-scheme:dark;background:rgba(0,0,0,.5)}
+html[data-tat=dark] body:has(#dash:not([hidden])) .scrim{--paper:#26292d;--sheet:#1c1e21;--ink:#eceef0;--muted:#8b9197;--line:#2e3236;--accent:#3fd3a5;--accent-ink:#06281d;--chip:#26292d;color:#eceef0;color-scheme:dark;background:rgba(0,0,0,.5)}
 html[data-tat=dark] body:has(#dash:not([hidden])) .scrim .sheet{border-color:rgba(255,255,255,.08)}
 .tatthm{display:flex;gap:10px;flex-wrap:wrap}
 .tatthm button{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;border:1px solid var(--d-line);background:var(--d-card2);color:var(--d-ink);font:inherit;cursor:pointer}
@@ -1296,7 +1299,7 @@ function homeArrange(html,H){
     <button class="dbtn" data-hhide="${k}">${hid?"👁 إظهار":"إخفاء"}</button>`;
    e.prepend(bar);}
   g.appendChild(e);});
- const top=`<div class="hhead">${homeEdit?`<span class="dmut">رتّب الرئيسية مثل ما تحب: كبّر وصغّر، صعّد ونزّل، أخفي الي ما تحتاجه.</span><button class="dbtn" data-hreset>رجّع الأصلي</button><button class="dbtn p" data-hdone>✓ تم</button>`:`<button class="dbtn hcust" data-hedit>✏ تخصيص الرئيسية</button>`}</div>`;
+ const top=`<div class="hhead">${homeEdit?`<span class="dmut">رتّب الرئيسية مثل ما تحب: كبّر وصغّر، صعّد ونزّل، أخفي الي ما تحتاجه.</span><button class="dbtn" data-hreset>رجّع الأصلي</button><button class="dbtn p" data-hdone>✓ تم</button>`:""}</div>`;
  return top+t.innerHTML;}
 function favEdit(list){list=list.slice().sort(byOrd);return `<div class="favedit">${list.map((d,i)=>`<div class="fe"><span>${esc(d.name)}</span><button class="dbtn" data-fmv="${d.id}" data-d="-1"${i===0?" disabled":""}>▲</button><button class="dbtn" data-fmv="${d.id}" data-d="1"${i===list.length-1?" disabled":""}>▼</button><button class="dbtn" data-fav="${d.id}">✕</button></div>`).join("")}</div><div class="dmut" style="margin-top:6px">تضيف للمفضلة من ♡ بالإعدادات أو من صفحة الإنارة.</div>`;}
 function homeSave(){const p=P();const body={project:p.id,devices:{},home:p.home||{}};p.devices.forEach(d=>body.devices[d.id]={name:d.name,fav:!!d.fav,ord:d.ord??null});
@@ -1466,6 +1469,7 @@ function dashSettings(){
  const p=P(),br=p.brand||{};const devs=p.devices.slice().sort(byOrd);let sv=false;try{sv=localStorage.getItem("knx-saver");sv=sv?sv==="1":/^(127\.0\.0\.1|localhost)$/.test(location.hostname);}catch(e){}
  const th=document.documentElement.dataset.tat||"dark";
  return `<div class="dsec" style="margin-top:0">شكل التطبيق</div><div class="tatthm"><button data-thm="dark" aria-pressed="${th==="dark"}"><i style="background:linear-gradient(135deg,#1c1e21,#3fd3a5)"></i>غامق</button><button data-thm="warm" aria-pressed="${th==="warm"}"><i style="background:linear-gradient(135deg,#e6e0d8,#23201c)"></i>فاتح دافي</button></div>
+ <div class="dsec">الصفحة الرئيسية</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px"><div style="flex:1" class="dmut">رتّب أقسام الرئيسية: كبّر وصغّر، صعّد ونزّل، وأخفي الي ما تحتاجه.</div><button class="dbtn p" data-hedit2>✏ تخصيص الرئيسية</button></div>
  <div class="dsec">الأجهزة: الاسم والمفضلة والترتيب</div>
  <div class="dcard" style="min-height:0;padding:8px">${devs.map((d,i)=>`<div class="setrow" data-sid="${d.id}"><button class="fav${d.fav?" on":""}" data-fav="${d.id}" aria-label="مفضلة">${DI.heart}</button>
   <input class="setin" data-nm="${d.id}" value="${esc(d.name)}"><span class="dmut" style="min-width:70px">${esc(d.room||"")}</span>
@@ -1536,9 +1540,9 @@ function editScene(id){
   <div class="field"><label>الأيقونة</label><div class="types">${SCENE_ICONS.map(([k,n])=>`<button data-ic="${k}" aria-pressed="${sc.icon===k}">${DI[k]}${n}</button>`).join("")}</div></div>
   <div class="field"><label>الأجهزة <button class="btn" id="scCap" type="button" style="padding:2px 10px;font-size:.78rem">خذ الوضع الحالي</button></label>
   <div class="devpick" style="max-height:38vh">${devs.map(d=>{const a=act(d.id);const lv=d.type==="dimmer"||(d.type==="tuya"&&d.dimCode);
-   return `<label style="flex-wrap:wrap"><input type="checkbox" data-sa="${d.id}" ${a?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span>
-   <select data-son="${d.id}" style="width:auto;padding:2px 6px;margin-inline-start:auto"><option value="1" ${!a||a.on?"selected":""}>${d.type==="blind"?"تنزل":"تشغيل"}</option><option value="0" ${a&&!a.on?"selected":""}>${d.type==="blind"?"تصعد":"إطفاء"}</option></select>
-   ${lv?`<input type="number" data-slv="${d.id}" min="1" max="100" value="${a&&a.level!=null?a.level:""}" placeholder="%" style="width:64px;padding:2px 6px">`:""}</label>`;}).join("")}</div></div>
+   return `<label class="scrow"><input type="checkbox" data-sa="${d.id}" ${a?"checked":""}><span class="nm">${esc(d.name)} <span class="muted">${esc(d.room||"")}</span></span>
+   <select data-son="${d.id}"><option value="1" ${!a||a.on?"selected":""}>${d.type==="blind"?"تنزل":"تشغيل"}</option><option value="0" ${a&&!a.on?"selected":""}>${d.type==="blind"?"تصعد":"إطفاء"}</option></select>
+   ${lv?`<input type="number" data-slv="${d.id}" min="1" max="100" value="${a&&a.level!=null?a.level:""}" placeholder="%" style="width:64px;padding:5px 6px">`:"<span></span>"}</label>`;}).join("")}</div></div>
   <div class="field"><label>الصوت</label><div class="devpick" id="scAud" style="max-height:30vh">${sceneAudioHtml(sc)}</div></div>
   <div class="actions">${old?`<button class="btn danger" id="scDel">حذف</button>`:"<span></span>"}<div style="display:flex;gap:8px"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="scOk">حفظ</button></div></div>`,s=>{
   s.querySelectorAll("[data-ic]").forEach(b=>b.onclick=()=>{sc.icon=b.dataset.ic;s.querySelectorAll("[data-ic]").forEach(x=>x.setAttribute("aria-pressed",x===b));if(!$("#scN").value)$("#scN").value=SCENE_ICONS.find(x=>x[0]===sc.icon)[1];});
@@ -2037,6 +2041,7 @@ function dashClick(e){
  if(b=q("[data-adv]")){const d=P().devices.find(x=>x.id===b.dataset.adv);operate(d);return;}
  if(dpage==="maint"&&(histClick(t)||mntClick(t)))return;
  if(dpage==="auto"&&autoClick(t))return;
+ if(q("[data-hedit2]")){dpage="home";homeEdit=true;renderDash();return;}
  if(dpage==="home"&&homeClick(t))return;
  if(b=q("[data-thm]")){document.documentElement.dataset.tat=b.dataset.thm;try{localStorage.setItem("tat-theme",b.dataset.thm);}catch(_){}renderDash();return;}
  if(b=q("[data-espan]")){energySpan=+b.dataset.espan;renderDash();return;}
