@@ -479,7 +479,7 @@ async function upd(){$("#m").innerHTML=`<h2>التحديثات</h2><div class="m
  <div class="grid" style="margin:16px 0">${box("واجهة البيت + الجسر (تحديث أونلاين)",b.web,"نسخة "+(b.web||"—"),r.web)}${box("KNX Prog (تابلت البيت)",(b.knxprog||{}).code,(b.knxprog||{}).name,r.knxprog)}${box("TAT SMART (تلفونات الزبائن)",(b.tatsmart||{}).code,(b.tatsmart||{}).name,r.tatsmart)}</div>
  <div class="card"><b>${pending?"اكو نسخة جديدة ما منشورة":"كلشي منشور ✓"}</b><label>ملاحظة النشر (شنو تغير)</label><input id="rn" value="${esc(r.note||"")}">
  <div class="row" style="margin-top:12px"><button class="b" id="rp" ${b.web?"":"disabled"}>⬆ انشر هاي النسخ لكل الزبائن</button><span class="mut">${r.t?"آخر نشر: "+when(r.t):""}</span></div>
- <div class="mut" style="margin-top:10px">التابلتات تاخذ تحديث الواجهة بالليل (2-5). التطبيقات تسأل الزبون "اكو تحديث" لما تنفتح.</div></div>`;
+ <div class="mut" style="margin-top:10px">التابلتات تاخذ تحديث الواجهة وحدها خلال 10 دقايق من النشر. التطبيقات تسأل الزبون "اكو تحديث" لما تنفتح.</div></div>`;
  $("#rp").onclick=async()=>{if(!confirm("تنشر النسخ الحالية لكل الزبائن؟"))return;const x=await post("api/release",{web:b.web,knxprog:(b.knxprog||{}).code,tatsmart:(b.tatsmart||{}).code,note:$("#rn").value});if(!x.ok){toast(x.error);return;}toast("انتشر ✓");upd();};}
 async function settings(){const s=await get("api/settings");
  $("#m").innerHTML=`<h2>الإعدادات</h2><div class="card"><label>عنوان السيرفر</label><input id="ss" class="ft" value="${esc(s.server)}">
