@@ -79,10 +79,11 @@ jobs:
           json.dump({"ver": int(sys.argv[2]), "min_app": int(sys.argv[1]), "files": files}, open(os.path.join(d, "manifest.json"), "w"))
           PY
           cat /tmp/out/web/manifest.json
+          python3 demo/build.py app/src/main/assets/index.html /tmp/out/demo.html
           cd /tmp/out
           git init -q -b apk
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add *.apk *.aab version.json web
+          git add *.apk *.aab version.json web demo.html
           git commit -q -m "APK from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" apk

@@ -37,6 +37,7 @@ import java.net.URL;
  */
 public class ControlActivity extends Activity {
     private static final String BASE = "https://knx.saqar-akd.com.iq/h/";
+    private static final String DEMO = "https://knx.saqar-akd.com.iq/demo/?app=tat";
     private static final String LOCAL = "http://127.0.0.1:8080/";
     private static final int PICK_FILE = 7;
     private SharedPreferences prefs;
@@ -120,6 +121,14 @@ public class ControlActivity extends Activity {
         });
         l.addView(go);
         l.addView(text("الباسورد يطلبه مرة وحدة بعد الدخول.", 13, "#64748b"));
+        Button demo = new Button(this);
+        demo.setText("جرّب بيت تجريبي (عرض)");
+        demo.setOnClickListener(v -> {
+            prefs.edit().putString("house", "demo").putBoolean("local", false).putString("url", DEMO).apply();
+            showPanel();
+        });
+        l.addView(demo);
+        l.addView(text("للتجربة بدون بيت. حتى ترجع: اضغط مطوّل على ⚙.", 12, "#64748b"));
         setContentView(l);
     }
 

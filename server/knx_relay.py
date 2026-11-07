@@ -407,6 +407,27 @@ h1{font-weight:500;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 6px}small{co
 <h2>Contact</h2><p>info@saqar-akd.com.iq</p></section></main></body></html>"""
 
 
+DEMO_URL = "https://raw.githubusercontent.com/alialqaisi878-hash/saqar-akd-KNX-app-/apk/demo.html"
+_demo = {"t": 0.0, "html": ""}
+
+
+async def demo_page(_req):
+    """Demo house for store reviewers and sales: the real app page with a fake house inside (built by CI)."""
+    if time.time() - _demo["t"] > 3600 or not _demo["html"]:
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+                async with s.get(DEMO_URL) as r:
+                    if r.status == 200:
+                        _demo["html"] = await r.text()
+                        _demo["t"] = time.time()
+        except Exception as e:  # keep serving the last copy
+            log.warning("demo fetch failed: %s", e)
+    if not _demo["html"]:
+        return web.Response(status=503, text="demo not ready")
+    return web.Response(text=_demo["html"], content_type="text/html", headers={"Cache-Control": "no-cache"})
+
+
 async def privacy_page(_req):
     return web.Response(text=PRIVACY_HTML, content_type="text/html")
 
@@ -430,6 +451,8 @@ def main() -> None:
         web.route("*", PREFIX + "/admin/api/notify", admin_notify),
         web.get(PREFIX + "/release.json", release_get),
         web.get(PREFIX + "/privacy", privacy_page),
+        web.get(PREFIX + "/demo", demo_page),
+        web.get(PREFIX + "/demo/", demo_page),
     ])
     if PREFIX:  # company-domain links without /knx
         app.add_routes([
@@ -443,6 +466,8 @@ def main() -> None:
             web.route("*", "/admin/api/notify", admin_notify),
             web.get("/release.json", release_get),
             web.get("/privacy", privacy_page),
+            web.get("/demo", demo_page),
+            web.get("/demo/", demo_page),
         ])
     admin_password()
     log.info("KNX relay listening on port %d", PORT)
