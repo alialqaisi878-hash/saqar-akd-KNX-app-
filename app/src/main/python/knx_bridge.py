@@ -1730,6 +1730,22 @@ def ota_fetch(forced: bool = False) -> int:
     return ver
 
 
+ota_soft = {"on": False}
+
+
+async def customer_update(_req):
+    """Customer's "check for updates" in Settings: fetch now, install only what the company released."""
+    if ota_kick is None or os.environ.get("KNX_WEB_VER") is None:
+        return web.json_response({"ok": False, "ver": WEB_VER, "state": "غير متاح"})
+    ota_soft["on"] = True
+    ota_kick.set()
+    for _ in range(40):  # wait up to ~20 s for the check
+        await asyncio.sleep(0.5)
+        if not ota_kick.is_set() and ota_state.get("checked", 0) >= time.time() - 25:
+            break
+    return web.json_response({"ok": True, "ver": WEB_VER, "new": ota_state.get("new", 0), "state": ota_state.get("state", "")})
+
+
 async def ota_loop() -> None:
     """Check every 10 minutes; a version released in TAT Admin is applied right away by itself
     (no technician needed, the bridge restarts in a few seconds and open pages reload)."""
@@ -1742,7 +1758,8 @@ async def ota_loop() -> None:
     except asyncio.TimeoutError:
         pass
     while True:
-        forced = ota_kick.is_set()
+        forced = ota_kick.is_set() and not ota_soft["on"]  # the customer's button only takes released versions
+        ota_soft["on"] = False
         ota_kick.clear()
         try:
             ota_state["state"] = ""
@@ -1757,6 +1774,7 @@ async def ota_loop() -> None:
             log.warning("online update check failed: %s", err)
         if ota_state["new"]:
             log.info("online update %s downloaded, restarting the bridge", ota_state["new"])
+            await asyncio.sleep(3)  # let the customer's "check for updates" answer first
             if restart_evt is not None:
                 restart_evt.set()
             return
@@ -2405,6 +2423,7 @@ async def main() -> None:
         web.put("/api/schedules", put_schedules),
         web.post("/api/alloff", all_off),
         web.post("/api/update", request_update),
+        web.post("/api/update/check", customer_update),
         web.get("/api/auto", get_auto),
         web.put("/api/auto", put_auto),
         web.post("/api/auto/test", test_notify),
