@@ -46,20 +46,22 @@ jobs:
       - name: Build
         env:
           TAT_KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :control:assembleDirectDebug :control:bundlePlayRelease
       - uses: actions/upload-artifact@v4
         with:
           name: SaqarKNX-apk
           path: |
             app/build/outputs/apk/debug/*.apk
-            control/build/outputs/apk/debug/*.apk
+            control/build/outputs/apk/direct/debug/*.apk
+            control/build/outputs/bundle/playRelease/*.aab
       - name: Publish APK to the apk branch
         run: |
           mkdir -p /tmp/out
           cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/KNXProg.apk
           cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/SaqarKNX.apk
-          cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/TATSMART.apk
-          cp control/build/outputs/apk/debug/control-debug.apk /tmp/out/AKDKNX.apk
+          cp control/build/outputs/apk/direct/debug/control-direct-debug.apk /tmp/out/TATSMART.apk
+          cp control/build/outputs/apk/direct/debug/control-direct-debug.apk /tmp/out/AKDKNX.apk
+          cp control/build/outputs/bundle/playRelease/control-play-release.aab /tmp/out/TATSMART-store.aab
           KC=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts); KN=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           TC=$(grep -oP 'versionCode = \K[0-9]+' control/build.gradle.kts); TN=$(grep -oP 'versionName = "\K[^"]+' control/build.gradle.kts)
           echo "{\"knxprog\":{\"code\":$KC,\"name\":\"$KN\"},\"tatsmart\":{\"code\":$TC,\"name\":\"$TN\"}}" > /tmp/out/version.json
@@ -81,6 +83,6 @@ jobs:
           git init -q -b apk
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add *.apk version.json web
+          git add *.apk *.aab version.json web
           git commit -q -m "APK from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" apk

@@ -47,8 +47,9 @@ public class ControlActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = getSharedPreferences("akd", MODE_PRIVATE);
+        edgeToEdge();
         if (prefs.getString("url", "").isEmpty()) showSetup(); else showPanel();
-        Updater.check((code, name, err) -> {
+        if (!"play".equals(BuildConfig.STORE)) Updater.check((code, name, err) -> {
             if (err != null || code <= Updater.localCode(this)) return;
             runOnUiThread(() -> new android.app.AlertDialog.Builder(this)
                     .setTitle("نسخة جديدة من TAT SMART")
@@ -61,6 +62,18 @@ public class ControlActivity extends Activity {
                     })
                     .setNegativeButton("بعدين", null)
                     .show());
+        });
+    }
+
+    /** Android 15+ draws under the status and navigation bars: keep the page clear of them (and of the keyboard). */
+    private void edgeToEdge() {
+        if (android.os.Build.VERSION.SDK_INT < 30) return;
+        View content = findViewById(android.R.id.content);
+        content.setOnApplyWindowInsetsListener((v, in) -> {
+            android.graphics.Insets s = in.getInsets(android.view.WindowInsets.Type.systemBars()
+                    | android.view.WindowInsets.Type.displayCutout() | android.view.WindowInsets.Type.ime());
+            v.setPadding(s.left, s.top, s.right, s.bottom);
+            return in;
         });
     }
 
