@@ -588,7 +588,58 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 body:has(#dash:not([hidden])) .scrim{--sheet:#fbf8f4;--ink:#23201c;--muted:#7a7166;--line:#e6ded3;--accent:#23201c;--accent-ink:#fff;--lit:#f0b65f;--lit-glow:rgba(240,182,95,.35);--chip:#efe9e1;color:#23201c;color-scheme:light;background:rgba(60,48,36,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 body:has(#dash:not([hidden])) .scrim .sheet{border-radius:26px;box-shadow:0 30px 60px -20px rgba(60,45,30,.45);border:1px solid #fff}
 body:has(#dash:not([hidden])) .scrim .btn{border-radius:14px}
+/* ===== TAT dark design (v7): graphite glass + mint, same layout and house map (html[data-tat=dark]) ===== */
+html[data-tat=dark] #dash{--d-bg:#0e1012;--d-card:rgba(28,30,33,.72);--d-card2:rgba(36,38,42,.72);--d-line:rgba(255,255,255,.07);--d-ink:#eceef0;--d-mut:#8b9197;--d-acc:#3fd3a5;--d-acc2:#2a9c7a;--d-acc3:#3fd3a5;--d-warm:#f0b65f;--d-sage:#3fd3a5;--d-amber:#f2bb62;color-scheme:dark;
+ background:radial-gradient(900px 520px at 80% -10%,rgba(63,211,165,.07) 0%,transparent 60%),radial-gradient(800px 600px at 0% 100%,rgba(120,130,150,.08) 0%,transparent 65%),linear-gradient(160deg,#131518,#0b0c0e)}
+html[data-tat=dark] #dash .dside{background:rgba(20,22,25,.85);border-color:rgba(255,255,255,.06)}
+html[data-tat=dark] #dash .dnav{border-radius:12px;color:#9aa0a6}
+html[data-tat=dark] #dash .dnav[aria-current="true"]{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.06);color:#fff;box-shadow:none}
+html[data-tat=dark] #dash .dnav[aria-current="true"] svg{color:#3fd3a5}
+html[data-tat=dark] #dash .dcard,html[data-tat=dark] #dash .rcard,html[data-tat=dark] #dash .dtile,html[data-tat=dark] #dash .dsc,html[data-tat=dark] #dash .camt,html[data-tat=dark] #dash .sol .sc{background:linear-gradient(160deg,rgba(38,40,44,.78),rgba(24,26,29,.78));border:1px solid rgba(255,255,255,.07);box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 20px 40px -24px rgba(0,0,0,.8)}
+html[data-tat=dark] #dash .dcard{border-radius:20px}
+html[data-tat=dark] #dash .dcard h3 svg{color:#3fd3a5}
+@media (hover:hover){html[data-tat=dark] #dash .dcard:hover,html[data-tat=dark] #dash .droom:hover,html[data-tat=dark] #dash .dsc:hover{border-color:rgba(63,211,165,.3);box-shadow:0 22px 44px -22px rgba(0,0,0,.9)}}
+html[data-tat=dark] #dash .dbtn,html[data-tat=dark] #dash .dpwr,html[data-tat=dark] #dash .dial .pm{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.08);color:#eceef0}
+html[data-tat=dark] #dash .dbtn.p,html[data-tat=dark] #dash .dpwr.on{background:#3fd3a5;border-color:#3fd3a5;color:#06281d}
+html[data-tat=dark] #dash .dtile .ic,html[data-tat=dark] #dash .rcard .ic{background:rgba(255,255,255,.06);color:#9aa0a6}
+html[data-tat=dark] #dash .dtile.on,html[data-tat=dark] #dash .rcard.lt.on{background:linear-gradient(160deg,rgba(63,211,165,.16),rgba(30,34,36,.85));color:#eceef0;border-color:rgba(63,211,165,.35);box-shadow:0 18px 34px -20px rgba(63,211,165,.35)}
+html[data-tat=dark] #dash .dtile.on .dmut,html[data-tat=dark] #dash .rcard.lt.on .dmut{color:#9fb9ae}
+html[data-tat=dark] #dash .dtile.on .ic,html[data-tat=dark] #dash .rcard.lt.on .ic{background:rgba(242,187,98,.14);color:#f2bb62}
+html[data-tat=dark] #dash .tgl{background:#33373c}html[data-tat=dark] #dash .tgl.on{background:#3fd3a5}html[data-tat=dark] #dash .tgl.on i{background:#06281d}
+html[data-tat=dark] #dash input[type=range]{accent-color:#3fd3a5}
+html[data-tat=dark] #dash .dchip{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.08);color:#9aa0a6}
+html[data-tat=dark] #dash .droom,html[data-tat=dark] #dash .rhero{background:linear-gradient(135deg,#2a2e33,#16181b)}
+html[data-tat=dark] #dash .srow{background:rgba(255,255,255,.04)}
+html[data-tat=dark] #dash .dhead h1{border-inline-start-color:#3fd3a5}
+html[data-tat=dark] #dash .dsky i{opacity:.16}
+html[data-tat=dark] #dash .setin,html[data-tat=dark] #dash input:not([type=checkbox]):not([type=range]):not([type=radio]),html[data-tat=dark] #dash select,html[data-tat=dark] #dash textarea{background:#1b1d20;color:#eceef0;border-color:rgba(255,255,255,.1)}
+html[data-tat=dark] #dash .hbar{background:rgba(20,22,25,.95)}
+html[data-tat=dark] .dback{background:#1b1d20;color:#eceef0;border-color:rgba(255,255,255,.1)}
+html[data-tat=dark] #dash .dplan{background:linear-gradient(160deg,rgba(38,40,44,.8),rgba(22,24,27,.8))}
+html[data-tat=dark] .hmhint{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.08);color:#9aa0a6}
+html[data-tat=dark] .hplan>img{mix-blend-mode:normal;filter:invert(.9) hue-rotate(180deg) brightness(.92) contrast(.95);opacity:.92}
+html[data-tat=dark] .hg{mix-blend-mode:screen}
+html[data-tat=dark] .hp{background:rgba(40,43,47,.95);color:#a9afb5;border-color:rgba(255,255,255,.12);box-shadow:0 6px 14px -5px rgba(0,0,0,.8)}
+html[data-tat=dark] .hp.on{background:#3fd3a5;color:#06281d;border-color:#3fd3a5}
+html[data-tat=dark] .hp.on.lt{background:#f2bb62;color:#3a2600;border-color:#f2bb62;box-shadow:0 0 0 4px rgba(242,187,98,.22),0 6px 14px -5px rgba(0,0,0,.8)}
+html[data-tat=dark] .hmap{color:#eceef0}
+html[data-tat=dark] .hmap::before{background:rgba(10,11,13,.86)}
+html[data-tat=dark] .hmzoom .hplan>img{background:none}
+html[data-tat=dark] .hmglass{background:rgba(30,32,35,.82);border-color:rgba(255,255,255,.08);box-shadow:0 14px 34px -18px rgba(0,0,0,.9)}
+html[data-tat=dark] .hmhd small{color:#8b9197}
+html[data-tat=dark] .hmbtn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#eceef0}
+html[data-tat=dark] .hmbtn.dk{background:#3fd3a5;border-color:#3fd3a5;color:#06281d}
+html[data-tat=dark] .hmz button,html[data-tat=dark] .hmrooms button{color:#eceef0}
+html[data-tat=dark] .hmrooms button.on{background:#3fd3a5;color:#06281d}
+html[data-tat=dark] .hmzoom.zl .hp .lb{background:rgba(30,32,35,.95);color:#eceef0}
+html[data-tat=dark] body:has(#dash:not([hidden])) .scrim{--sheet:#1c1e21;--ink:#eceef0;--muted:#8b9197;--line:#2e3236;--accent:#3fd3a5;--accent-ink:#06281d;--chip:#26292d;color:#eceef0;color-scheme:dark;background:rgba(0,0,0,.5)}
+html[data-tat=dark] body:has(#dash:not([hidden])) .scrim .sheet{border-color:rgba(255,255,255,.08)}
+.tatthm{display:flex;gap:10px;flex-wrap:wrap}
+.tatthm button{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;border:1px solid var(--d-line);background:var(--d-card2);color:var(--d-ink);font:inherit;cursor:pointer}
+.tatthm button[aria-pressed=true]{outline:2px solid var(--d-acc)}
+.tatthm i{width:26px;height:26px;border-radius:8px;display:block}
 </style>
+<script>try{document.documentElement.dataset.tat=localStorage.getItem("tat-theme")||"dark";}catch(e){document.documentElement.dataset.tat="dark";}</script>
 
 </head>
 <body>
@@ -1347,7 +1398,9 @@ function dashRoom(){
 }
 function dashSettings(){
  const p=P(),br=p.brand||{};const devs=p.devices.slice().sort(byOrd);let sv=false;try{sv=localStorage.getItem("knx-saver");sv=sv?sv==="1":/^(127\.0\.0\.1|localhost)$/.test(location.hostname);}catch(e){}
- return `<div class="dsec">الأجهزة: الاسم والمفضلة والترتيب</div>
+ const th=document.documentElement.dataset.tat||"dark";
+ return `<div class="dsec" style="margin-top:0">شكل التطبيق</div><div class="tatthm"><button data-thm="dark" aria-pressed="${th==="dark"}"><i style="background:linear-gradient(135deg,#1c1e21,#3fd3a5)"></i>غامق</button><button data-thm="warm" aria-pressed="${th==="warm"}"><i style="background:linear-gradient(135deg,#e6e0d8,#23201c)"></i>فاتح دافي</button></div>
+ <div class="dsec">الأجهزة: الاسم والمفضلة والترتيب</div>
  <div class="dcard" style="min-height:0;padding:8px">${devs.map((d,i)=>`<div class="setrow" data-sid="${d.id}"><button class="fav${d.fav?" on":""}" data-fav="${d.id}" aria-label="مفضلة">${DI.heart}</button>
   <input class="setin" data-nm="${d.id}" value="${esc(d.name)}"><span class="dmut" style="min-width:70px">${esc(d.room||"")}</span>
   <button class="dbtn" data-mv="${d.id}" data-d="-1" ${i===0?"disabled":""}>▲</button><button class="dbtn" data-mv="${d.id}" data-d="1" ${i===devs.length-1?"disabled":""}>▼</button></div>`).join("")}</div>
@@ -1899,6 +1952,7 @@ function dashClick(e){
  if(dpage==="maint"&&mntClick(t))return;
  if(dpage==="auto"&&autoClick(t))return;
  if(dpage==="home"&&homeClick(t))return;
+ if(b=q("[data-thm]")){document.documentElement.dataset.tat=b.dataset.thm;try{localStorage.setItem("tat-theme",b.dataset.thm);}catch(_){}renderDash();return;}
  if(b=q("[data-espan]")){energySpan=+b.dataset.espan;renderDash();return;}
  if(q("[data-noopen]")){return;}
  if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer)loadBInfo();if(k==="auto")loadAuto();renderDash();return;}
