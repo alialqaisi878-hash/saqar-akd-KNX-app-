@@ -638,6 +638,8 @@ html[data-tat=dark] body:has(#dash:not([hidden])) .scrim .sheet{border-color:rgb
 .tatthm button{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;border:1px solid var(--d-line);background:var(--d-card2);color:var(--d-ink);font:inherit;cursor:pointer}
 .tatthm button[aria-pressed=true]{outline:2px solid var(--d-acc)}
 .tatthm i{width:26px;height:26px;border-radius:8px;display:block}
+/* side menu scrolls on short screens (wall tablets in landscape) */
+@media (min-width:821px){#dash{grid-template-rows:100%}.dside{min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.dside .dnav{flex:none}.dmain{min-height:0}}
 </style>
 <script>try{document.documentElement.dataset.tat=localStorage.getItem("tat-theme")||"dark";}catch(e){document.documentElement.dataset.tat="dark";}</script>
 
