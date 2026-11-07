@@ -105,6 +105,10 @@ def db() -> sqlite3.Connection:
     CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
     CREATE TABLE IF NOT EXISTS log(id INTEGER PRIMARY KEY AUTOINCREMENT, t INTEGER, kind TEXT, text TEXT);
     """)
+    cols = [r["name"] for r in c.execute("PRAGMA table_info(customers)")]
+    if "hidden" not in cols:
+        c.execute("ALTER TABLE customers ADD COLUMN hidden INTEGER DEFAULT 0")
+        c.commit()
     return c
 
 
@@ -210,9 +214,9 @@ def api(method: str, path: str, body: dict):
         for h in live:
             c = rows.pop(h["house"], {})
             out.append({**h, **{k: c.get(k, "") for k in ("name", "phone", "address", "installed", "notes")},
-                        "house_name": h.get("name", ""), "known": bool(c)})
+                        "house_name": h.get("name", ""), "known": bool(c), "hidden": bool(c.get("hidden"))})
         for c in rows.values():  # in the database but not (yet) on the server
-            out.append({"house": c["house"], "online": False, "missing": True, **c})
+            out.append({"house": c["house"], "online": False, "missing": True, **c, "hidden": bool(c.get("hidden"))})
         return {"houses": out, "error": error}
     if path == "/api/customer" and method == "POST":
         h = str(body.get("house", "")).strip().lower()
@@ -228,6 +232,39 @@ def api(method: str, path: str, body: dict):
     if path == "/api/customer/delete" and method == "POST":
         with lock:
             CON.execute("DELETE FROM customers WHERE house=?", (str(body.get("house", "")),))
+            CON.commit()
+        return {"ok": True}
+    if path == "/api/house/remove" and method == "POST":
+        # one button in the customers list: delete the house from the server when it can be
+        # (not connected), otherwise just hide it from this list (it can be shown again)
+        h = str(body.get("house", "")).strip().lower()
+        if not h:
+            return {"ok": False, "error": "اسم البيت فارغ"}
+        why = ""
+        if not body.get("missing"):
+            try:
+                r = remote("/admin/api/forget", {"house": h})
+                if not r.get("ok"):
+                    why = r.get("error", "")
+            except urllib.error.HTTPError as e:
+                try:
+                    why = json.loads(e.read().decode("utf-8")).get("error", "") or err_text(e)
+                except Exception:  # noqa: BLE001
+                    why = err_text(e)
+            except Exception as e:  # noqa: BLE001
+                why = err_text(e)
+        with lock:
+            if not why:
+                CON.execute("DELETE FROM customers WHERE house=?", (h,))
+            else:
+                CON.execute("INSERT OR IGNORE INTO customers(house,created) VALUES(?,?)", (h, int(time.time())))
+                CON.execute("UPDATE customers SET hidden=1 WHERE house=?", (h,))
+            CON.commit()
+        add_log("remove" if not why else "hide", h)
+        return {"ok": True, "done": "hidden" if why else "deleted", "why": why}
+    if path == "/api/customer/unhide" and method == "POST":
+        with lock:
+            CON.execute("UPDATE customers SET hidden=0 WHERE house=?", (str(body.get("house", "")),))
             CON.commit()
         return {"ok": True}
     if path == "/api/house/forget" and method == "POST":
@@ -389,27 +426,31 @@ const toast=t=>{const e=$("#toast");e.textContent=t;e.style.display="block";clea
 const ago=s=>{if(!s)return"—";const d=Math.round(Date.now()/1000-s);return d<90?"هسه":d<5400?Math.round(d/60)+" دقيقة":d<172800?Math.round(d/3600)+" ساعة":Math.round(d/86400)+" يوم";};
 const when=s=>s?new Date(s*1000).toLocaleString("ar-IQ"):"—";
 const PAGES=[["cust","👥 الزبائن"],["notify","🔔 الإشعارات"],["upd","⬆ التحديثات"],["set","⚙ الإعدادات"]];
-let page="cust",houses=[],sel=new Set(),q="";
+let page="cust",houses=[],sel=new Set(),q="",showHidden=false;
 function nav(){$("#nav").innerHTML=PAGES.map(([k,n])=>`<button class="${k===page?"on":""}" data-p="${k}">${n}</button>`).join("");}
 $("#nav").onclick=e=>{const b=e.target.closest("[data-p]");if(b){page=b.dataset.p;go();}};
 async function go(){nav();({cust,notify,upd,set:settings})[page]();}
 async function loadHouses(){const r=await get("api/houses");houses=r.houses||[];return r.error;}
 async function cust(){const err=await loadHouses();draw(err);}
-function draw(err){const f=houses.filter(h=>!q||[h.house,h.name,h.phone,h.address].join(" ").toLowerCase().includes(q));
+function draw(err){const nh=houses.filter(h=>h.hidden).length;const f=houses.filter(h=>(showHidden||!h.hidden)&&(!q||[h.house,h.name,h.phone,h.address].join(" ").toLowerCase().includes(q)));
  $("#m").innerHTML=`<h2>الزبائن</h2><div class="mut">كل بيت مربوط بالسيرفر يطلع هنا تلقائياً. دوس على أي بيت حتى تكتب اسم الزبون ورقمه وعنوانه. المعلومات تنحفظ على هاي الحاسبة بس.</div>
  ${err?`<div class="err">${esc(err)}</div>`:""}
  <div class="stats"><div class="st"><b>${houses.length}</b><span class="mut">كل البيوت</span></div><div class="st"><b style="color:var(--ok)">${houses.filter(h=>h.online).length}</b><span class="mut">متصل هسه</span></div><div class="st"><b style="color:var(--bad)">${houses.filter(h=>!h.online).length}</b><span class="mut">غير متصل</span></div><div class="st"><b>${houses.filter(h=>!h.name).length}</b><span class="mut">بدون اسم زبون</span></div></div>
- <div class="row" style="margin-bottom:10px"><input id="q" placeholder="دوّر: اسم، رقم، بيت، عنوان" value="${esc(q)}" style="max-width:340px"><button class="b" id="addc">+ زبون</button><button class="g" id="ntsel" ${sel.size?"":"disabled"}>🔔 إشعار للمحددين (${sel.size})</button></div>
+ <div class="row" style="margin-bottom:10px"><input id="q" placeholder="دوّر: اسم، رقم، بيت، عنوان" value="${esc(q)}" style="max-width:340px"><button class="b" id="addc">+ زبون</button><button class="g" id="ntsel" ${sel.size?"":"disabled"}>🔔 إشعار للمحددين (${sel.size})</button>${nh?`<button class="g" id="shh">${showHidden?"اخفي المحذوفة":"👁 المخفية ("+nh+")"}</button>`:""}</div>
  <table><thead><tr><th><input type="checkbox" id="all" style="width:auto"></th><th>الزبون</th><th>البيت</th><th>الحالة</th><th>النسخة</th><th>الهاتف</th><th></th></tr></thead><tbody>
  ${f.map(h=>`<tr class="click" data-h="${esc(h.house)}"><td><input type="checkbox" data-s="${esc(h.house)}" ${sel.has(h.house)?"checked":""} style="width:auto"></td>
  <td><b>${esc(h.name)||'<span class="mut">— بدون اسم —</span>'}</b>${h.address?`<div class="mut">${esc(h.address)}</div>`:""}</td><td class="ft">${esc(h.house)}</td>
  <td>${h.missing?'<span class="mut">مو بالسيرفر</span>':`<span class="dot ${h.online?"on":"off"}"></span>${h.online?"متصل":"آخر مرة "+ago(h.last)}`}</td>
- <td>${h.v?`<span class="tag">واجهة ${esc(h.v)}</span>`:""}${h.app?` <span class="tag">KNX Prog ${esc(h.app)}</span>`:""}</td><td class="ft">${esc(h.phone)}</td><td>${h.link?`<a href="${esc(server+h.link.replace(/^https?:\/\/[^/]+/,""))}" target="_blank" style="color:var(--acc)" data-x>فتح ↗</a>`:""}</td></tr>`).join("")||`<tr><td colspan="7" class="mut">ما اكو بيوت بعد</td></tr>`}
+ <td>${h.v?`<span class="tag">واجهة ${esc(h.v)}</span>`:""}${h.app?` <span class="tag">KNX Prog ${esc(h.app)}</span>`:""}</td><td class="ft">${esc(h.phone)}</td><td style="white-space:nowrap">${h.link?`<a href="${esc(server+h.link.replace(/^https?:\/\/[^/]+/,""))}" target="_blank" style="color:var(--acc)" data-x>فتح ↗</a>`:""} ${h.hidden?`<button class="g" data-un="${esc(h.house)}" title="رجّعه للقائمة">↩ رجّع</button>`:`<button class="g" data-rm="${esc(h.house)}" title="حذف" style="color:var(--bad)">🗑</button>`}</td></tr>`).join("")||`<tr><td colspan="7" class="mut">ما اكو بيوت بعد</td></tr>`}
  </tbody></table>`;
  $("#q").oninput=e=>{q=e.target.value.toLowerCase();const p=e.target.selectionStart;draw(err);$("#q").focus();$("#q").setSelectionRange(p,p);};
  $("#addc").onclick=()=>edit({house:""});$("#ntsel").onclick=()=>{page="notify";go();};
  $("#all").onchange=e=>{f.forEach(h=>e.target.checked?sel.add(h.house):sel.delete(h.house));draw(err);};
- $("#m").querySelector("tbody").onclick=e=>{if(e.target.closest("[data-x]"))return;const s=e.target.closest("[data-s]");if(s){s.checked?sel.add(s.dataset.s):sel.delete(s.dataset.s);$("#ntsel").disabled=!sel.size;$("#ntsel").textContent=`🔔 إشعار للمحددين (${sel.size})`;return;}const r=e.target.closest("[data-h]");if(r)edit(houses.find(h=>h.house===r.dataset.h));};}
+ if($("#shh"))$("#shh").onclick=()=>{showHidden=!showHidden;draw(err);};
+ $("#m").querySelector("tbody").onclick=async e=>{if(e.target.closest("[data-x]"))return;
+  const rm=e.target.closest("[data-rm]");if(rm){const h=houses.find(x=>x.house===rm.dataset.rm);if(!confirm("تحذف "+(h.name||h.house)+" من قائمة الزبائن؟"+(h.online?"\n(البيت متصل هسه، فراح ينخفي من القائمة بس، والتابلت يبقى شغال)":"")))return;
+   const r=await post("api/house/remove",{house:h.house,missing:!!h.missing});if(!r.ok){toast(r.error||"ما انحذف");return;}sel.delete(h.house);toast(r.done==="deleted"?"انحذف ✓":"انخفى من القائمة ✓");cust();return;}
+  const un=e.target.closest("[data-un]");if(un){await post("api/customer/unhide",{house:un.dataset.un});toast("رجع للقائمة");cust();return;}const s=e.target.closest("[data-s]");if(s){s.checked?sel.add(s.dataset.s):sel.delete(s.dataset.s);$("#ntsel").disabled=!sel.size;$("#ntsel").textContent=`🔔 إشعار للمحددين (${sel.size})`;return;}const r=e.target.closest("[data-h]");if(r)edit(houses.find(h=>h.house===r.dataset.h));};}
 function edit(h){const d=$("#dlg");d.innerHTML=`<h2>${h.house?"زبون: <span class=ft>"+esc(h.house)+"</span>":"زبون جديد"}</h2>
  ${h.house?"":`<label>اسم البيت (نفس house_id بـ KNX Prog)</label><input id="eh" class="ft">`}
  <label>اسم الزبون</label><input id="en" value="${esc(h.name)}"><label>الهاتف</label><input id="ep" class="ft" value="${esc(h.phone)}">

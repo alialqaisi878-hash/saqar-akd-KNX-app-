@@ -33,13 +33,20 @@ jobs:
       - name: Company signing key
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/tat.jks"
-            echo "TAT_KEYSTORE=$RUNNER_TEMP/tat.jks" >> "$GITHUB_ENV"
-            echo "signing with the company key"
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::KEYSTORE_B64 secret missing: debug key (updates need uninstall)"
+          elif [ -z "$KEYSTORE_PASS" ]; then
+            echo "::warning::KEYSTORE_PASS secret missing (add it with exactly this name): debug key for now"
           else
-            echo "KEYSTORE_B64 secret missing: debug key (updates need uninstall)"
+            echo "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/tat.jks"
+            if keytool -list -keystore "$RUNNER_TEMP/tat.jks" -storepass "$KEYSTORE_PASS" -alias tat >/dev/null 2>&1; then
+              echo "TAT_KEYSTORE=$RUNNER_TEMP/tat.jks" >> "$GITHUB_ENV"
+              echo "signing with the company key"
+            else
+              echo "::warning::KEYSTORE_PASS does not open KEYSTORE_B64 (copy both again from 6-Signing-PRIVATE): debug key for now"
+            fi
           fi
       - name: Version of the page/Python inside the APK
         run: echo "${{ github.run_number }}" > app/src/main/assets/webver.txt
