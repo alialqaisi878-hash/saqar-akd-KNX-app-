@@ -659,7 +659,7 @@ html[data-tat=dark] body:has(#dash:not([hidden])) .scrim .sheet{border-color:rgb
 /* side menu scrolls on short screens (wall tablets in landscape) */
 @media (min-width:821px){#dash{grid-template-rows:100%}.dside{min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.dside .dnav{flex:none}.dmain{min-height:0}}
 </style>
-<script>try{document.documentElement.dataset.tat=localStorage.getItem("tat-theme")||"dark";}catch(e){document.documentElement.dataset.tat="dark";}</script>
+<script>document.documentElement.dataset.tat="warm";/* Ali: light look for everyone, no switch */</script>
 
 </head>
 <body>
@@ -1470,7 +1470,7 @@ function dashRoom(){
 function dashSettings(){
  const p=P(),br=p.brand||{};const devs=p.devices.slice().sort(byOrd);let sv=false;try{sv=localStorage.getItem("knx-saver");sv=sv?sv==="1":/^(127\.0\.0\.1|localhost)$/.test(location.hostname);}catch(e){}
  const th=document.documentElement.dataset.tat||"dark";
- return `<div class="dsec" style="margin-top:0">شكل التطبيق</div><div class="tatthm"><button data-thm="dark" aria-pressed="${th==="dark"}"><i style="background:linear-gradient(135deg,#1c1e21,#3fd3a5)"></i>غامق</button><button data-thm="warm" aria-pressed="${th==="warm"}"><i style="background:linear-gradient(135deg,#e6e0d8,#23201c)"></i>فاتح دافي</button></div>
+ return `
  <div class="dsec">التحديثات</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1" class="dmut">البرنامج يتحدث وحده. تكدر تفحص هسة إذا اكو نسخة جديدة. <span id="updInfo"></span></div><button class="dbtn p" data-cupd>⟳ تحقق من التحديثات</button></div>${(window.TATApp&&TATApp.changeHouse)?'<div class="dsec">الاتصال بالبيت</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1" class="dmut">إذا علّق التطبيق اضغط إعادة الاتصال. ربط ببيت آخر يمسح ربط هذا البيت من الموبايل.</div><button class="dbtn" data-appre>🔄 إعادة الاتصال</button><button class="dbtn" data-apphouse>🏠 ربط ببيت آخر</button></div>':''}
  <div class="dsec">الصفحة الرئيسية</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px"><div style="flex:1" class="dmut">رتّب أقسام الرئيسية: كبّر وصغّر، صعّد ونزّل، وأخفي الي ما تحتاجه.</div><button class="dbtn p" data-hedit2>✏ تخصيص الرئيسية</button></div>
  <div class="dsec">الأجهزة: الاسم والمفضلة والترتيب</div>
