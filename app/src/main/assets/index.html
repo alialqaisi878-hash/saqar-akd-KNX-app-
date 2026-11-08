@@ -2060,7 +2060,7 @@ function renderDash(){
   ${DPAGES.filter(([k])=>(k!=="maint"&&k!=="map")||role.installer).map(([k,n,ic])=>`<button class="dnav" data-dp="${k}" aria-current="${dpage===k||(dpage==="room"&&k==="rooms")}">${DI[ic]}${n}</button>`).join("")}
   <span class="sp"></span>${br.name?`<span class="dmut" style="padding:0 12px;font-size:.72rem">${esc(p.name||"")}</span>`:""}${role.locked?`<button class="dnav" id="dLock">${DI.lock}${role.installer?"خروج الفني":"الفني"}</button>`:""}</nav>
   <main class="dmain${dpage!==lastDpage?" enter":""}">${skyHtml()}${dpage==="home"?`<div class="dbrandtop"><img src="${br.logo||TAT_LOGO}" alt="TAT"><span class="clk" id="dClk">${clockText()}</span></div>`:""}<div class="dhead"><div><h1>${esc(titles[dpage]||"")}</h1><div class="sub">${dpage==="home"?esc(p.name||"")+" · "+now.toLocaleDateString("ar-IQ",{weekday:"long",day:"numeric",month:"long"}):dpage==="room"?`<a href="#" data-dp="rooms" style="color:var(--d-acc)">‹ كل الغرف</a>`:""}</div></div>
-  <div class="dchips"><span class="dchip">💡 <b>${lightsOn}</b> شغّال</span><span class="dchip">${knxState==="connected"?"🟢 متصل":"🔴 غير متصل"}</span></div></div>${body()}</main>`;
+  <div class="dchips"><span class="dchip">💡 <b>${lightsOn}</b> شغّال</span><span class="dchip">${knxState==="connected"?"🟢 متصل":"🔴 غير متصل"}</span>${location.protocol==="https:"?`<button class="dchip" data-via="net" style="cursor:pointer;font:inherit">🌐 عن طريق النت</button>`:`<button class="dchip" data-via="lan" style="cursor:pointer;font:inherit;color:#1f8a5b">🏠 محلي مباشر</button>`}</div></div>${body()}</main>`;
  if(dpage!==lastDpage)el.querySelectorAll(".dmain .dcard,.dmain .dtile,.dmain .droom,.dmain .dsc,.dmain .camt,.dmain .rcard").forEach((c,k)=>c.style.setProperty("--k",Math.min(k,14)));
  lastDpage=dpage;
  const ci=$("#chatIn");if(ci){ci.value=draft;}
@@ -2091,6 +2091,7 @@ function dashClick(e){
  if(b=q("[data-cupd]")){b.disabled=true;b.textContent="⟳ جاري الفحص…";fetch("api/update/check",{method:"POST"}).then(r=>r.json()).then(j=>{
    if(j.new&&j.new>j.ver)toast("اكو تحديث جديد، ينزل هسة والشاشة تتحدث وحدها خلال دقيقة");else if(j.state==="held")toast("ماكو تحديث منشور بعد، عندك آخر نسخة");else if(String(j.state||"").startsWith("error"))toast("ما گدر يفحص، تأكد من الإنترنت بالتابلت");else toast("عندك آخر نسخة ✓");
    const i=document.getElementById("updInfo");if(i)i.textContent="النسخة "+(j.ver||"—");}).catch(()=>toast("ما گدر يفحص")).finally(()=>{b.disabled=false;b.textContent="⟳ تحقق من التحديثات";});return;}
+ if(b=q("[data-via]")){toast(b.dataset.via==="lan"?"🏠 متصل بتابلت البيت مباشرة على شبكة البيت (أسرع، بدون نت)":"🌐 متصل عن طريق سيرفر الشركة (النت). إذا أنت بالبيت: الإعدادات ← 🔄 إعادة الاتصال حتى يحوّل للمحلي");return;}
  if(q("[data-tech]")){$("#instBtn").click();return;}
  if(q("[data-appre]")){try{TATApp.reload();}catch(e){location.reload();}return;}
  if(q("[data-apphouse]")){if(confirm("تريد تفك ربط هذا البيت وتربط ببيت آخر؟"))try{TATApp.changeHouse();}catch(e){}return;}
