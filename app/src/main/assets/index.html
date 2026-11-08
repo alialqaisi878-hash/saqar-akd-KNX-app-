@@ -150,7 +150,8 @@ button{cursor:pointer}
 .devpick label.scrow{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)}
 .devpick label.scrow:last-child{border-bottom:0}.devpick label.scrow input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
 .devpick label.scrow select{width:auto;padding:5px 8px}.devpick label.scrow .nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.devpick{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px}.devpick label{display:flex;gap:6px;align-items:center;padding:3px 0;font-size:.85rem}
+.devpick label:not(.scrow)>input[type=checkbox]{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent)}.devpick label:not(.scrow){line-height:1.5;padding:7px 2px!important;border-bottom:1px solid var(--line);font-size:.9rem!important;color:var(--ink)}.devpick label:not(.scrow):last-child{border-bottom:0}.devpick .dvn{flex:1;min-width:0}.devpick .dvn small{display:block;color:var(--muted);font-size:.75rem}
+.devpick{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px}.devpick label{display:flex;gap:6px;align-items:center;padding:3px 0;font-size:.85rem}
 #allOff.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 select{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
 .types button{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.75rem}
@@ -2198,7 +2199,7 @@ function renderSchedules(pane){
 }
 function holidayPick(){const devs=P().devices.filter(d=>["switch","dimmer","tuya"].includes(d.type));
  sheet(`<header><h2>إنارة وضع السفر</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
-  <div class="devpick" style="max-height:50vh">${devs.map(d=>`<label><input type="checkbox" data-hv="${d.id}" ${holiday.devices.includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">${esc(d.room||"")}</span></label>`).join("")||"<span class='muted'>ما بيه إنارة</span>"}</div>
+  <div class="devpick" style="max-height:50vh">${devs.map(d=>`<label><input type="checkbox" data-hv="${d.id}" ${holiday.devices.includes(d.id)?"checked":""}><span class="dvn">${esc(d.name)}<small>${esc(d.room||"")}</small></span></label>`).join("")||"<span class='muted'>ما بيه إنارة</span>"}</div>
   <div class="actions"><span></span><button class="btn primary" id="holOk">حفظ</button></div>`,()=>{
   $("#holOk").onclick=()=>{holiday.devices=[...document.querySelectorAll("[data-hv]:checked")].map(c=>c.dataset.hv);if(!holiday.devices.length)holiday.enabled=false;saveSchedules();close();schedRefresh();};});
 }
@@ -2212,7 +2213,7 @@ function editSchedule(i){
   <div class="field"><label for="sName">الاسم (اختياري)</label><input id="sName" value="${esc(s.name||"")}" placeholder="مثلاً: صباح الخير"></div>
   <div class="field"><label for="sWhat">شنو يشغّل</label><select id="sWhat">${scenes.map(x=>`<option value="sc:${esc(x.id)}"${what==="sc:"+x.id?" selected":""}>🎬 مشهد ${esc(x.name)}</option>`).join("")}<option value="dev"${what==="dev"?" selected":""}>💡 أجهزة أختارها</option></select></div>
   <div id="fDev"><div class="field"><label>تشغيل لو إطفاء</label><div class="big"><button type="button" id="sOn" class="${s.on!==false?"active":""}">تشغيل</button><button type="button" id="sOff" class="${s.on===false?"active":""}">إطفاء</button></div></div>
-   <div class="field"><label>الأجهزة</label><div class="devpick">${devs.map(d=>`<label><input type="checkbox" data-dv="${d.id}" ${(s.devices||[]).includes(d.id)?"checked":""}>${esc(d.name)} <span class="muted">· ${esc(d.room||TYPES[d.type].label)}</span></label>`).join("")||"<span class='muted'>ما بيه أجهزة</span>"}</div></div></div>
+   <div class="field"><label>الأجهزة</label><div class="devpick">${devs.map(d=>`<label><input type="checkbox" data-dv="${d.id}" ${(s.devices||[]).includes(d.id)?"checked":""}><span class="dvn">${esc(d.name)}<small>${esc(d.room||TYPES[d.type].label)}</small></span></label>`).join("")||"<span class='muted'>ما بيه أجهزة</span>"}</div></div></div>
   <div class="grid2"><div class="field"><label for="sAt">يشتغل</label><select id="sAt"><option value="time">بوقت محدد</option><option value="sunset" ${s.at==="sunset"?"selected":""}>🌇 الغروب${sunT.sunset?" ("+sunT.sunset+")":""}</option><option value="sunrise" ${s.at==="sunrise"?"selected":""}>🌅 الشروق${sunT.sunrise?" ("+sunT.sunrise+")":""}</option></select></div>
    <div class="field" id="fTime"><label for="sTime">الساعة</label><input id="sTime" type="time" value="${esc(s.time||"19:00")}"></div>
    <div class="field" id="fOff"><label for="sOffs">قبل/بعد (دقايق)</label><input id="sOffs" type="number" step="5" value="${+s.offset||0}" placeholder="-15 = قبل ربع ساعة"></div></div>
