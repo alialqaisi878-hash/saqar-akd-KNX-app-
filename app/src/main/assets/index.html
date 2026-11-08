@@ -1806,7 +1806,7 @@ function integHtml(){
  return `<div class="dcard integ" data-keep="1" style="min-height:0">
   <b>انفرتر Solis (SolisCloud)</b>
   <p class="dmut" style="margin:4px 0 8px;font-size:.78rem">من SolisCloud: Basic Settings ← API Management ← فعّل، وانسخ KeyID و KeySecret هنا. ينحفظن على تابليت البيت بس.</p>
-  <div class="irow"><label>KeyID<input class="setin" data-sk="id" value="${esc(so.key_id||"")}" autocomplete="off" dir="ltr"></label>
+  <div class="irow"><label>KeyID<input class="setin" data-sk="id" value="${esc(so.key_id||"")}" autocomplete="off" dir="ltr" style="min-width:210px"></label>
    <label>KeySecret<input class="setin" data-sk="secret" type="password" value="${esc(so.secret||"")}" placeholder="${so.has_secret?"محفوظ، اتركه فارغ":""}" autocomplete="new-password" dir="ltr"></label>${stTx}</div>
  </div>
  <div class="dcard integ" data-keep="1" style="min-height:0;margin-top:12px">

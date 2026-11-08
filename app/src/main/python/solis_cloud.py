@@ -9,6 +9,9 @@ import base64
 import hashlib
 import hmac
 import json
+import re
+import time
+from email.utils import parsedate_to_datetime
 from email.utils import formatdate
 
 import aiohttp
@@ -55,8 +58,9 @@ def _energy_kwh(d: dict, key: str):
 
 class SolisCloud:
     def __init__(self, key_id: str, secret: str, base: str = BASE):
-        self.key_id = key_id.strip()
-        self.secret = secret.strip()
+        # copied from the SolisCloud page: drop spaces, line breaks and invisible characters
+        self.key_id = re.sub(r"[^0-9A-Za-z]", "", key_id or "")
+        self.secret = re.sub(r"[^0-9A-Za-z]", "", secret or "")
         self.base = (base or BASE).rstrip("/")
         self._session: aiohttp.ClientSession | None = None
         self.inverter: dict | None = None  # {"id", "sn"} of the first inverter, found once
@@ -79,7 +83,20 @@ class SolisCloud:
         async with s.post(self.base + path, data=data, headers=self._headers(path, data)) as r:
             text = await r.text()
             if r.status in (401, 403):
-                raise SolisError("SolisCloud رفض المفتاح: تأكد من KeyID و KeySecret")
+                skew = 0.0
+                try:
+                    skew = abs(parsedate_to_datetime(r.headers.get("Date", "")).timestamp() - time.time())
+                except Exception:  # noqa: BLE001
+                    pass
+                if skew > 600:
+                    raise SolisError(f"ساعة التابلت مو مضبوطة (فرق {int(skew // 60)} دقيقة)، SolisCloud يرفض. صلّح التاريخ والوقت بالتابلت (تلقائي)")
+                why = ""
+                try:
+                    j = json.loads(text)
+                    why = str(j.get("msg") or j.get("message") or j.get("code") or "")[:80]
+                except ValueError:
+                    why = text.strip()[:80]
+                raise SolisError(f"SolisCloud رفض المفتاح ({r.status}{': ' + why if why else ''}). تأكد KeyID {len(self.key_id)} رقم، و KeySecret {len(self.secret)} حرف")
             try:
                 res = json.loads(text)
             except ValueError:
