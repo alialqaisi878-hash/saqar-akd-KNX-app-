@@ -115,6 +115,28 @@ def db() -> sqlite3.Connection:
 CON = db()
 
 
+def reset_lock_if_asked() -> None:
+    """Forgot the program password: put a file named reset-password next to TATAdmin.exe (or the database)
+    and open the program. The password is cleared (customers stay) and a new one is chosen on the first screen."""
+    for d in {HERE, DATA, DB_FILE.parent}:
+        try:
+            files = [f for f in d.iterdir() if f.is_file() and f.name.lower().startswith("reset-password")]
+        except OSError:
+            continue
+        for f in files:
+            with lock:
+                CON.execute("DELETE FROM settings WHERE k IN ('lock_hash','lock_salt')")
+                CON.commit()
+            try:
+                f.unlink()
+            except OSError:
+                pass
+            print("program password cleared by", f, flush=True)
+
+
+reset_lock_if_asked()
+
+
 def setting(k: str, default: str = "") -> str:
     r = CON.execute("SELECT v FROM settings WHERE k=?", (k,)).fetchone()
     return r["v"] if r else default
