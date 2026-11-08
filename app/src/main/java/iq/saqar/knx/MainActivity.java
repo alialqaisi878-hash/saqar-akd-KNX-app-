@@ -70,9 +70,7 @@ public class MainActivity extends Activity {
         l.addView(link);
         l.addView(text("اضغط على الرابط حتى تنسخه.", 12, "#64748b"));
 
-        Button panel = button("فتح الصفحة (التعديل)");
-        panel.setOnClickListener(v -> startActivity(new Intent(this, PanelActivity.class)));
-        l.addView(panel);
+        l.addView(text("هذا التطبيق جسر بس. التعديل والصيانة من تطبيق TAT SMART: الإعدادات ← 🔧 دخول الفني.", 13, "#94a3b8"));
         Button settings = button("الإعدادات (الفني)");
         settings.setOnClickListener(v -> openSettings());
         l.addView(settings);
