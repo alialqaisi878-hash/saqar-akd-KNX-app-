@@ -1694,6 +1694,54 @@ async def knx_loop() -> None:
         await asyncio.sleep(8)
 
 
+# ---------------------------------------------------------------- password guessing guard
+# Every wrong password (login form, installer login, X-Key/X-Admin header) is counted per address
+# and for all addresses together. Past the limit, password checks fail for 15 minutes.
+# Signed-in cookies keep working, so the owner is never locked out of a session they already have.
+_FAILS: dict = {}
+FAIL_WINDOW = 15 * 60
+FAIL_LIMIT = 8        # wrong passwords from one address
+FAIL_LIMIT_ALL = 40   # wrong passwords from everywhere (forwarded addresses can be faked)
+
+
+def same(a, b) -> bool:
+    return bool(b) and secrets.compare_digest(str(a or "").encode(), str(b).encode())
+
+
+def client_ip(req) -> str:
+    for h in ("Cf-Connecting-Ip", "X-Forwarded-For"):
+        v = req.headers.get(h, "")
+        if v:
+            return v.split(",")[0].strip()[:64]
+    return req.remote or "?"
+
+
+def _recent(ip: str, now: float) -> list:
+    lst = [t for t in _FAILS.get(ip, []) if now - t < FAIL_WINDOW]
+    if lst:
+        _FAILS[ip] = lst
+    else:
+        _FAILS.pop(ip, None)
+    return lst
+
+
+def locked(req) -> bool:
+    now = time.time()
+    if len(_recent(client_ip(req), now)) >= FAIL_LIMIT:
+        return True
+    return sum(len(_recent(k, now)) for k in list(_FAILS)) >= FAIL_LIMIT_ALL
+
+
+def failed(req) -> None:
+    if len(_FAILS) > 5000:
+        _FAILS.clear()
+    _FAILS.setdefault(client_ip(req), []).append(time.time())
+    log.warning("wrong password from %s", client_ip(req))
+
+
+TOO_MANY = "محاولات كثيرة غلط. جرب بعد ربع ساعة"
+
+
 # ---------------------------------------------------------------- remote access
 REMOTE_PW = str(CFG.get("remote_password") or "")
 TOKEN = hashlib.sha256(("knx-bridge|" + REMOTE_PW).encode()).hexdigest() if REMOTE_PW else ""
@@ -1703,10 +1751,25 @@ INSTALLER_PW = str(CFG.get("installer_password") or "")
 INST_TOKEN = hashlib.sha256(("knx-installer|" + INSTALLER_PW).encode()).hexdigest() if INSTALLER_PW else ""
 
 
+def key_ok(req, pw: str) -> bool:
+    """X-Key header check. A key that matches neither password counts once as a wrong guess."""
+    k = req.headers.get("X-Key", "")
+    if not k or not pw:
+        return False
+    if locked(req):
+        return False
+    if same(k, pw):
+        return True
+    if not (same(k, REMOTE_PW) or same(k, INSTALLER_PW)) and not req.get("key_counted"):
+        req["key_counted"] = True
+        failed(req)
+    return False
+
+
 def is_installer(req) -> bool:
     if not INSTALLER_PW:
         return True  # no installer password set: everything stays open as before
-    return req.cookies.get("knxinst") == INST_TOKEN or req.headers.get("X-Key") == INSTALLER_PW
+    return same(req.cookies.get("knxinst", ""), INST_TOKEN) or key_ok(req, INSTALLER_PW)
 
 
 # ---------------------------------------------------------------- online update (no reinstall)
@@ -1909,10 +1972,14 @@ async def installer_login(req):
         pw = (await req.json()).get("pw", "")
     except Exception:  # noqa: BLE001
         pw = ""
-    if INSTALLER_PW and pw == INSTALLER_PW:
+    if locked(req):
+        await asyncio.sleep(1)
+        return web.json_response({"ok": False, "error": TOO_MANY}, status=429)
+    if same(pw, INSTALLER_PW):
         resp = web.json_response({"ok": True})
         resp.set_cookie("knxinst", INST_TOKEN, max_age=3600 * 12, httponly=True, secure=is_remote(req), samesite="Lax")
         return resp
+    failed(req)
     await asyncio.sleep(1)
     return web.json_response({"ok": False}, status=403)
 
@@ -1941,7 +2008,7 @@ def is_remote(req) -> bool:
 def authed(req) -> bool:
     if not REMOTE_PW:
         return True
-    return req.cookies.get("knxauth") == TOKEN or req.headers.get("X-Key") == REMOTE_PW
+    return same(req.cookies.get("knxauth", ""), TOKEN) or key_ok(req, REMOTE_PW)
 
 
 @web.middleware
@@ -1967,10 +2034,14 @@ async def login(req):
     if req.method == "GET":
         return web.Response(text=LOGIN_HTML % "", content_type="text/html")
     form = await req.post()
-    if REMOTE_PW and form.get("pw") == REMOTE_PW:
+    if locked(req):
+        await asyncio.sleep(1)
+        return web.Response(text=LOGIN_HTML % f"<span style='color:#f87171'>{TOO_MANY}</span>", content_type="text/html", status=429)
+    if same(form.get("pw", ""), REMOTE_PW):
         resp = web.HTTPFound("./")
         resp.set_cookie("knxauth", TOKEN, max_age=3600 * 24 * 365, httponly=True, secure=True, samesite="Lax")
         return resp
+    failed(req)
     await asyncio.sleep(1)
     return web.Response(text=LOGIN_HTML % "<span style='color:#f87171'>كلمة السر غلط</span>", content_type="text/html")
 

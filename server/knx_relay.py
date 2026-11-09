@@ -268,12 +268,67 @@ document.getElementById("ns").onclick=async()=>{const m=document.getElementById(
 </script></main>"""
 
 
+# ---------------------------------------------------------------- password guessing guard
+# Every wrong password (login form, installer login, X-Key/X-Admin header) is counted per address
+# and for all addresses together. Past the limit, password checks fail for 15 minutes.
+# Signed-in cookies keep working, so the owner is never locked out of a session they already have.
+_FAILS: dict = {}
+FAIL_WINDOW = 15 * 60
+FAIL_LIMIT = 8        # wrong passwords from one address
+FAIL_LIMIT_ALL = 40   # wrong passwords from everywhere (forwarded addresses can be faked)
+
+
+def same(a, b) -> bool:
+    return bool(b) and secrets.compare_digest(str(a or "").encode(), str(b).encode())
+
+
+def client_ip(req) -> str:
+    for h in ("Cf-Connecting-Ip", "X-Forwarded-For"):
+        v = req.headers.get(h, "")
+        if v:
+            return v.split(",")[0].strip()[:64]
+    return req.remote or "?"
+
+
+def _recent(ip: str, now: float) -> list:
+    lst = [t for t in _FAILS.get(ip, []) if now - t < FAIL_WINDOW]
+    if lst:
+        _FAILS[ip] = lst
+    else:
+        _FAILS.pop(ip, None)
+    return lst
+
+
+def locked(req) -> bool:
+    now = time.time()
+    if len(_recent(client_ip(req), now)) >= FAIL_LIMIT:
+        return True
+    return sum(len(_recent(k, now)) for k in list(_FAILS)) >= FAIL_LIMIT_ALL
+
+
+def failed(req) -> None:
+    if len(_FAILS) > 5000:
+        _FAILS.clear()
+    _FAILS.setdefault(client_ip(req), []).append(time.time())
+    log.warning("wrong admin password from %s", client_ip(req))
+
+
+TOO_MANY = "محاولات كثيرة غلط. جرب بعد ربع ساعة"
+
+
 def admin_ok(req) -> bool:
     """Browser cookie after login, or the TAT Admin program on the company PC (X-Admin: password)."""
     if secrets.compare_digest(req.cookies.get("tatadmin", ""), ADMIN_TOKEN):
         return True
     pw = req.headers.get("X-Admin", "")
-    return bool(pw) and secrets.compare_digest(pw.encode(), admin_password().encode())
+    if not pw or locked(req):
+        return False
+    if same(pw, admin_password()):
+        return True
+    if not req.get("admin_counted"):
+        req["admin_counted"] = True
+        failed(req)
+    return False
 
 
 # ---------------------------------------------------------------- releases and company messages
@@ -370,10 +425,14 @@ async def admin_page(req: web.Request):
     msg = ""
     if req.method == "POST":
         pw = (await req.post()).get("pw", "")
-        if secrets.compare_digest(str(pw), admin_password()):
+        if locked(req):
+            await asyncio.sleep(1.5)
+            return web.Response(text=ADMIN_HTML % (ADMIN_LOGIN % TOO_MANY), content_type="text/html", status=429)
+        if same(pw, admin_password()):
             resp = web.HTTPFound(req.path)
             resp.set_cookie("tatadmin", ADMIN_TOKEN, max_age=3600 * 24 * 30, httponly=True, secure=True, samesite="Strict", path=base + "/admin/")
             raise resp
+        failed(req)
         await asyncio.sleep(1.5)
         msg = "كلمة السر غلط"
     if not admin_ok(req):
