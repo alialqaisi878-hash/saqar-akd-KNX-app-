@@ -786,6 +786,19 @@ html[data-tat=night] #dash .dsky{display:none}
 @media (max-width:900px){#dash .nmain{grid-template-columns:minmax(0,1fr);height:auto;min-height:0}#dash .n3d{height:clamp(330px,82vw,540px)}#dash .npanel{overflow:visible}#dash .nlist{overflow:visible}#dash .n3hint{display:none}#dash .nsum{grid-template-columns:repeat(4,1fr)}}
 @media (max-width:520px){#dash .n3tools{flex-direction:row;top:10px;inset-inline-end:10px}#dash .n3ib{width:34px;height:34px}#dash .nsum{grid-template-columns:repeat(2,1fr)}#dash .n3pin{height:27px;min-width:27px;padding:0 6px;font-size:.7rem;gap:4px}#dash .n3pin svg{width:14px;height:14px}#dash .nph{padding:12px 10px 10px}#dash .nlist{padding:12px 10px}#dash .nbig>.num{font-size:2.4rem}}
 @media (prefers-reduced-motion:reduce){#dash .n3plan.anim{transition:none}#dash .n3g{animation:none}}
+.tylist{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow-y:auto;margin:6px 0 4px}
+.tyrow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.tyrow.new{border-color:var(--lit,#ffb24a);box-shadow:0 0 0 2px color-mix(in srgb,var(--lit,#ffb24a) 30%,transparent)}
+.tyic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--chip);flex:none}
+.tyic svg{width:18px;height:18px}
+.tyn{flex:1;min-width:0}.tyn b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tyn small{color:var(--muted)}
+.tynew{font-style:normal;font-size:.7rem;background:var(--lit,#ffb24a);color:#2a1700;border-radius:99px;padding:1px 7px;margin-inline-start:4px}
+.tygw{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px dashed var(--line);margin-bottom:6px}
+.tyon{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.tyon small{flex-basis:100%;color:var(--muted)}
+.tydot{width:10px;height:10px;border-radius:50%;background:var(--lit,#ffb24a);animation:typ 1s ease-in-out infinite alternate}
+@keyframes typ{to{opacity:.25;transform:scale(.7)}}
+.tyerr{color:var(--danger,#f87171)}
+#dash .naddty{align-self:flex-start;font:inherit;font-size:.82rem;height:36px;padding:0 14px;border-radius:12px;border:1px dashed rgba(150,172,222,.35);background:none;color:var(--d-mut);cursor:pointer}
 .tatthm{display:flex;gap:10px;flex-wrap:wrap}
 .tatthm button{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;border:1px solid var(--d-line);background:var(--d-card2);color:var(--d-ink);font:inherit;cursor:pointer}
 .tatthm button[aria-pressed=true]{outline:2px solid var(--d-acc)}
@@ -901,6 +914,85 @@ async function loadTuya(force){
  if(!r.ok)throw new Error(r.error||"Tuya");
  tuyaList=r.devices;r.devices.forEach(x=>tuyaSt[x.id]=x);return tuyaList;
 }
+
+/* ---------- add Tuya devices from the app (installer): pick from the Tuya account, Zigbee pairing via the gateway ---------- */
+function tyKind(x){
+ const st=x.status||{},cat=x.category||"";
+ if(/^wg/.test(cat)||cat==="wfcon")return {k:"gw",label:"گيتوي"};
+ const bools=Object.keys(st).filter(k=>typeof st[k]==="boolean"&&!/^(child_lock|light_mode|countdown|relay_status|switch_inching)/.test(k));
+ const pref=["switch_led","switch_1","switch","switch_led_1"];const code=pref.find(k=>bools.includes(k))||bools[0]||"";
+ if(!code)return {k:"none",label:"ما مدعوم بعد"};
+ const dimCode=Object.keys(st).find(k=>typeof st[k]==="number"&&/^bright_value/.test(k))||"";
+ const o={code,dimCode};
+ if(Object.keys(st).some(k=>/^colour_data/.test(k)))return Object.assign(o,{k:"light",label:"ضوء ملون"});
+ if(dimCode)return Object.assign(o,{k:"light",label:"ضوء ديمر"});
+ if(/^(dj|dd|xdd|fwd|dc|tgq|tgkg)$/.test(cat))return Object.assign(o,{k:"light",label:"ضوء"});
+ if(typeof st.cur_power==="number")return Object.assign(o,{k:"plug",label:"بلك/قاطع بعداد كهرباء"});
+ if(/^(cz|pc)$/.test(cat))return Object.assign(o,{k:"plug",label:"بلك"});
+ return Object.assign(o,{k:"plug",label:/^(kg|tdq|dlq)$/.test(cat)?"سويچ":"جهاز"});
+}
+function tyAdd(x,room){
+ const p=P(),k=tyKind(x);if(!k.code)return null;
+ const st=x.status||{},r=DIM_RANGE[k.dimCode]||[10,1000];
+ /* a 2/3/4-gang switch becomes one device per button */
+ const gangs=k.dimCode?[]:Object.keys(st).filter(c=>/^switch_\d+$/.test(c)&&typeof st[c]==="boolean").sort();
+ const codes=gangs.length>1?gangs:[k.code];let d=null;
+ codes.forEach((c,i)=>{const n=p.devices.filter(z=>z.nomap).length;
+  d={id:uid(),name:codes.length>1?x.name+" "+(i+1):x.name,type:"tuya",tuyaId:x.id,tuyaName:x.name,code:c,dimCode:codes.length>1?"":(k.dimCode||""),dimMin:r[0],dimMax:r[1],room:room||"",floor:p.floor,
+   x:4+(n%10)*5,y:5+Math.floor(n/10)*7,nomap:true,ga:{},sceneNo:1,st:{on:!!st[c],level:0,pos:0,setpoint:22,temp:25}};
+  p.devices.push(d);});
+ return d;
+}
+var TY={room:"",disc:null,seen:null,timer:0};
+function tuyaAddSheet(){
+ if(!role.installer){toast("إضافة الأجهزة للفني فقط");return;}
+ const rooms=[...new Set(P().devices.map(x=>x.room).filter(Boolean))];
+ sheet(`<header><h2>إضافة أجهزة تويا</h2><button class="x" data-close aria-label="إغلاق">✕</button></header>
+  <p class="note">هاي الأجهزة الموجودة بحساب التويا ومو مضافة للبيت بعد. دوس "إضافة" وتطلع بالتطبيق مباشرة. حتى تطلع على الخريطة، رتّبها بعدين من وضع التعديل (تلگاها بزاوية الخريطة).</p>
+  <div class="field"><label for="tyRoom">الغرفة اللي تنضاف إلها</label><input id="tyRoom" list="tyRoomDl" value="${esc(TY.room)}" placeholder="مثلاً: الصالة (تكدر تخليها فارغة)"><datalist id="tyRoomDl">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></div>
+  <div id="tyGw"></div><div id="tyList" class="tylist"><p class="muted">جاري جلب الأجهزة من تويا…</p></div>
+  <p class="note">جهاز واي فاي جديد من الكارتون: اربطه أول مرة بتطبيق Smart Life (نفس الحساب المربوط)، وبعدها دوس ⟳ تحديث ويطلع هنا.</p>
+  <div class="actions"><button class="btn" data-tyref>⟳ تحديث</button><div style="display:flex;gap:8px"><button class="btn" data-close>سد</button><button class="btn primary" data-tyall hidden>إضافة الكل</button></div></div>`,
+  s=>{
+   const ri=s.querySelector("#tyRoom");ri.oninput=()=>{TY.room=ri.value.trim();};
+   s.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+    if(b.dataset.tyref!=null){tyLoad(true);return;}
+    if(b.dataset.tyadd){const x=(tuyaList||[]).find(y=>y.id===b.dataset.tyadd);if(x&&tyAdd(x,TY.room)){tyDone();toast("انضاف "+x.name);tyPaint();}return;}
+    if(b.dataset.tyall!=null){const list=tyFree();let n=0;list.forEach(x=>{if(tyKind(x).code&&tyAdd(x,TY.room))n++;});if(n){tyDone();toast("انضافت "+n+" أجهزة");}tyPaint();return;}
+    if(b.dataset.tydisc){tyDiscover(b.dataset.tydisc);return;}});
+   tyLoad(true);
+  });
+}
+function tyDone(){tuyaApply();save();if(dashOn)renderDash();else{renderStage();renderPane();}}
+function tyFree(){const have=new Set(P().devices.filter(d=>d.type==="tuya"&&d.tuyaId).map(d=>d.tuyaId));return (tuyaList||[]).filter(x=>!have.has(x.id)&&tyKind(x).k!=="gw");}
+function tyLoad(force){const box=document.getElementById("tyList");if(!box)return;
+ loadTuya(force).then(()=>{if(!TY.seen)TY.seen=new Set((tuyaList||[]).map(x=>x.id));tyPaint();})
+ .catch(e=>{box.innerHTML=`<p class="tyerr">${esc(e.message)}</p>`;});}
+function tyPaint(){const box=document.getElementById("tyList");if(!box)return;
+ const free=tyFree(),ok=free.filter(x=>tyKind(x).code),bad=free.filter(x=>!tyKind(x).code);
+ const added=(tuyaList||[]).length-free.length-(tuyaList||[]).filter(x=>tyKind(x).k==="gw").length;
+ box.innerHTML=(ok.length?ok.map(x=>{const k=tyKind(x),nw=TY.disc&&TY.seen&&!TY.seen.has(x.id);
+   const gg=k.dimCode?0:Object.keys(x.status||{}).filter(c=>/^switch_\d+$/.test(c)).length;
+   return `<div class="tyrow${nw?" new":""}"><span class="tyic">${k.k==="light"?DI.light:I.tuya}</span><span class="tyn"><b>${esc(x.name)}${nw?' <i class="tynew">جديد</i>':""}</b><small>${esc(k.label)}${gg>1?" · "+gg+" أزرار":""}${x.product?" · "+esc(x.product):""} · <span style="color:${x.online?"var(--ok,#36d39a)":"var(--danger,#f87171)"}">${x.online?"متصل":"غير متصل"}</span></small></span><button class="btn primary" data-tyadd="${esc(x.id)}">＋ إضافة</button></div>`;}).join("")
+   :`<p class="muted">كل أجهزة التويا مضافة للبيت ✓</p>`)
+  +(bad.length?`<p class="muted" style="margin-top:8px">${bad.length} جهاز نوعه بعده ما مدعوم: ${bad.map(x=>esc(x.name)).join("، ")}</p>`:"")
+  +(added>0?`<p class="muted">${added} جهاز مضاف من قبل.</p>`:"");
+ const all=document.querySelector("[data-tyall]");if(all){all.hidden=ok.length<2;all.textContent="إضافة الكل ("+ok.length+")";}
+ const gws=(tuyaList||[]).filter(x=>tyKind(x).k==="gw"),g=document.getElementById("tyGw");
+ if(g){const left=TY.disc?Math.max(0,Math.round((TY.disc.until-Date.now())/1000)):0;
+  g.innerHTML=gws.length?`<div class="tygw"><b>أجهزة زيغبي جديدة</b>${gws.map(x=>TY.disc&&TY.disc.gw===x.id&&left>0
+    ?`<div class="tyon"><span class="tydot"></span>${esc(x.name)} يدور هسه… باقي <span class="num">${Math.floor(left/60)}:${String(left%60).padStart(2,"0")}</span><small>حط الجهاز على وضع الربط (عادةً تدوس زره 5 ثواني لحد ما يرمش بسرعة). الأجهزة اللي تلگاها تطلع بالقائمة جوه مكتوب عليها "جديد".</small></div>`
+    :`<button class="btn" data-tydisc="${esc(x.id)}"${x.online?"":" disabled"}>🔍 ابحث عن أجهزة جديدة · ${esc(x.name)}${x.online?"":" (غير متصل)"}</button>`).join("")}</div>`:"";}
+}
+function tyDiscover(gw){const b=document.querySelector(`[data-tydisc="${CSS.escape(gw)}"]`);if(b){b.disabled=true;b.textContent="⟳ جاري التشغيل…";}
+ TY.seen=new Set((tuyaList||[]).map(x=>x.id));
+ fetch("api/tuya/discover",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gw,seconds:120})}).then(r=>r.json()).then(r=>{
+  if(!r.ok){toast(r.error||"ما اشتغل البحث");tyPaint();return;}
+  TY.disc={gw,until:Date.now()+(r.seconds||120)*1000};tyPaint();clearInterval(TY.timer);let k=0;
+  TY.timer=setInterval(()=>{if(!document.getElementById("tyList")){clearInterval(TY.timer);TY.disc=null;return;}
+   if(Date.now()>TY.disc.until){clearInterval(TY.timer);loadTuya(true).then(()=>{TY.disc=null;tyPaint();toast("خلص البحث");}).catch(()=>{TY.disc=null;tyPaint();});return;}
+   if(++k%4===0)loadTuya(true).then(tyPaint).catch(()=>{});else tyPaint();},1000);
+ }).catch(()=>{toast("ما كدرت أوصل لبرنامج الربط");tyPaint();});}
 
 /* ---------- sample project ---------- */
 function samplePlan(){
@@ -1208,7 +1300,7 @@ $("#stage").addEventListener("pointermove",e=>{
 });
 $("#stage").addEventListener("pointerup",()=>{
  if(!drag)return;const d=P().devices.find(x=>x.id===drag.id);
- if(drag.moved&&mode==="edit"){d.x=+drag.x.toFixed(2);d.y=+drag.y.toFixed(2);save();drag.el.classList.remove("dragging");}
+ if(drag.moved&&mode==="edit"){d.x=+drag.x.toFixed(2);d.y=+drag.y.toFixed(2);delete d.nomap;save();drag.el.classList.remove("dragging");}
  else if(d){mode==="edit"?editDevice(d):operate(d);}
  drag=null;
 });
@@ -1491,7 +1583,7 @@ function dashHome(){
 /* ===== house map: hero card + full screen map (zoom, pinch, drag, tap a device) ===== */
 function planAr(p){return p.planW&&p.planH?(p.planW/p.planH):1.5;}
 function planInner(p){
- const ds=flDevs(p).filter(d=>d.type!=="scene"&&d.x!=null&&d.y!=null);
+ const ds=flDevs(p).filter(d=>d.type!=="scene"&&d.x!=null&&d.y!=null&&!d.nomap);
  const glows=ds.filter(d=>isLight(d)&&d.st.on).map(d=>{const c=devColor(d);const lv=d.type==="dimmer"||d.dimCode?Math.max(.35,(d.st.level||100)/100):1;
   return `<i class="hg" style="left:${d.x}%;top:${d.y}%;--go:${lv};${c?`--gc:${c}99`:""}"></i>`;}).join("");
  return `<img src="${p.plan}" alt="">`+glows+ds.map(d=>{const on=isOnD(d)&&d.type!=="blind";
@@ -1510,7 +1602,7 @@ function nIco(d){return d.type==="hvac"?I.hvac:d.type==="blind"?I.blind:d.type==
 function nBlind(d){const v=d.st.pos||0;return v<=0?"مفتوحة":v>=100?"مسكّرة":"مسكّرة "+v+"%";}
 function n3Html(p){
  const ar=planAr(p),W=1000,H=Math.round(1000/ar);
- const ds=flDevs(p).filter(d=>d.type!=="scene"&&d.x!=null&&d.y!=null);
+ const ds=flDevs(p).filter(d=>d.type!=="scene"&&d.x!=null&&d.y!=null&&!d.nomap);
  const glows=ds.filter(d=>isLight(d)&&d.st.on).map(d=>{const c=devColor(d);const lv=d.type==="dimmer"||d.dimCode?Math.max(.35,(d.st.level||100)/100):1;
   return `<i class="n3g" style="left:${d.x}%;top:${d.y}%;--go:${lv};${c?`--gc:${c}`:""}"></i>`;}).join("");
  let slab="";for(let k=1;k<=7;k++)slab+=`<div class="n3l n3s" style="transform:translateZ(${-k*3}px)"></div>`;
@@ -1575,7 +1667,7 @@ function dashHomeNeo(){
  const tabs=`<div class="ntabs"><button data-nr="all" aria-pressed="${nroom==="all"}">كل البيت</button>${favs.length?`<button data-nr="fav" aria-pressed="${nroom==="fav"}">${DI.heart}المفضلة</button>`:""}${rooms.map(r=>`<button data-nr="${esc(r)}" aria-pressed="${nroom===r}">${devs.some(d=>d.room===r&&isLight(d)&&d.st.on)?"<i></i>":""}${esc(r)}</button>`).join("")}</div>`;
  return `<div class="nhome"><div class="nscenes">${sceneBtns()}</div>
   <div class="nmain${p.plan?"":" noplan"}">${p.plan?n3Html(p):""}
-  <section class="npanel"><div class="nph">${sum}${tabs}</div><div class="nlist">${list||`<div class="dempty">ما بيه أجهزة بعد. الفني يضيفها من وضع التعديل.</div>`}</div></section></div></div>`;
+  <section class="npanel"><div class="nph">${sum}${tabs}</div><div class="nlist">${list||`<div class="dempty">ما بيه أجهزة بعد. الفني يضيفها من وضع التعديل.</div>`}${role.installer?`<button class="naddty" data-tyopen>＋ إضافة أجهزة تويا</button>`:""}</div></section></div></div>`;
 }
 /* camera for the 3D house */
 function n3Fit(anim){const st=document.getElementById("n3stage"),pl=document.getElementById("n3plan");if(!st||!pl)return;
@@ -1663,14 +1755,14 @@ function hmClamp(){const Z=HM.Z,W=innerWidth,H=innerHeight,pw=Z.bw*Z.z,ph=pw/HM.
 function hmFit(){const b=hmBase();Object.assign(HM.Z,{bw:b.bw,x:b.x,y:b.y,z:1});}
 function hmZoomAt(cx,cy,k){const Z=HM.Z;k=hmCl(k,1,5);const px=(cx-Z.x)/Z.z,py=(cy-Z.y)/Z.z;Z.z=k;Z.x=cx-px*k;Z.y=cy-py*k;hmClamp();hmApply();}
 function hmRoom(r){HM.room=r;const m=hmEl();m.querySelectorAll("[data-hr]").forEach(b=>b.classList.toggle("on",(b.dataset.hr||null)===r));
- const ds=r?flDevs(P()).filter(d=>d.room===r&&d.x!=null):[];if(!ds.length){hmFit();hmApply();return;}
+ const ds=r?flDevs(P()).filter(d=>d.room===r&&d.x!=null&&!d.nomap):[];if(!ds.length){hmFit();hmApply();return;}
  const Z=HM.Z,bh=Z.bw/HM.ar,xs=ds.map(d=>d.x/100*Z.bw),ys=ds.map(d=>d.y/100*bh),pad=Z.bw*.07;
  const x0=Math.min(...xs)-pad,x1=Math.max(...xs)+pad,y0=Math.min(...ys)-pad,y1=Math.max(...ys)+pad,W=innerWidth,H=innerHeight;
  const k=hmCl(Math.min((W-110)/(x1-x0),(H-hmTop()-hmBot()-40)/(y1-y0)),1,2.4);Z.z=k;Z.x=W/2-(x0+x1)/2*k;Z.y=hmTop()+(H-hmTop()-hmBot())/2-(y0+y1)/2*k;hmClamp();hmApply();}
 function hmapPaint(){if(!HM.open)return;const p=P(),m=hmEl();if(!p.plan){hmapClose();return;}
  const pl=m.querySelector(".hmzoom .hplan");pl.innerHTML=planInner(p);
  const on=p.devices.filter(d=>isLight(d)&&d.st.on).length;m.querySelector("#hmT").textContent=p.name||"البيت";m.querySelector("#hmC").textContent=on?on+" ضوء شغّال":"كل الإنارة طافية";}
-function hmRooms(){const p=P(),m=hmEl();HM.room=null;const rooms=roomsOf().filter(r=>flDevs(p).some(d=>d.room===r&&d.x!=null));
+function hmRooms(){const p=P(),m=hmEl();HM.room=null;const rooms=roomsOf().filter(r=>flDevs(p).some(d=>d.room===r&&d.x!=null&&!d.nomap));
  m.querySelector(".hmrooms").innerHTML=`<button class="on" data-hr="">${p.floors.length>1?"كل الطابق":"كل البيت"}</button>`+rooms.map(r=>`<button data-hr="${esc(r)}">${esc(r)}</button>`).join("");
  m.querySelector(".hmrooms").hidden=!rooms.length;}
 function hmFloors(){const p=P(),m=hmEl(),f=m.querySelector(".hmfloors");f.innerHTML=floorChips(p,false);f.hidden=p.floors.length<2;}
@@ -1733,6 +1825,7 @@ function dashSettings(){
  <div style="margin-top:10px"><button class="dbtn p" data-saveown="1">حفظ الأسماء والترتيب</button></div>
  <div class="dsec">شاشة التابليت</div>
  <div class="dcard" style="min-height:0"><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-saver="1" ${sv?"checked":""}> شاشة الساعة بعد دقيقتين بدون لمس (على هذا الجهاز)</label></div>
+ ${role.installer?`<div class="dsec">أجهزة تويا (للفني)</div><div class="dcard" style="min-height:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1" class="dmut">ضيف أجهزة التويا اللي بحسابك للبيت بدوسة، أو خلي گيتوي الزيغبي يدور على أجهزة جديدة.</div><button class="dbtn p" data-tyopen>＋ إضافة أجهزة تويا</button></div>`:""}
  ${role.installer?`<div class="dsec">الشركة (للفني)</div><div class="dcard" style="min-height:0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   ${br.logo?`<img src="${br.logo}" alt="" style="height:56px;max-width:120px;object-fit:contain;background:rgba(255,255,255,.04);border-radius:10px;padding:6px">`:""}
   <label class="dbtn">رفع الشعار<input type="file" accept="image/*" hidden data-logo="1"></label>
@@ -2355,6 +2448,7 @@ function dashClick(e){
  if(dpage==="home"&&homeClick(t))return;
  if(b=q("[data-thm]")){document.documentElement.dataset.tat=b.dataset.thm;try{localStorage.setItem("tat-theme",b.dataset.thm);}catch(_){}renderDash();return;}
  if(b=q("[data-espan]")){energySpan=+b.dataset.espan;renderDash();return;}
+ if(q("[data-tyopen]")){tuyaAddSheet();return;}
  if(q("[data-noopen]")){return;}
  if(b=q("[data-dp]")){e.preventDefault();const k=b.dataset.dp;if(k==="map"){dashOn=false;try{localStorage.setItem("knx-dash","0");}catch(_){}renderDash();render();return;}dpage=k;camBig=null;if(k==="solar"){loadSolar();energyHist=null;}if(k==="settings"&&role.installer)loadInteg();if(k==="maint"&&role.installer){loadBInfo();loadHist();}if(k==="auto")loadAuto();renderDash();return;}
  if(b=q("#dLock")){$("#instBtn").click();return;}

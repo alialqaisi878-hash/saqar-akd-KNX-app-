@@ -120,6 +120,20 @@ class TuyaCloud:
         except TuyaError:
             await self.call("POST", f"/v1.0/devices/{device_id}/commands", body=body)
 
+    async def sub_discovery(self, gateway_id: str, seconds: int = 120) -> None:
+        """Puts a Tuya Zigbee gateway in pairing mode so new sub-devices join it (and the account)."""
+        q = {"duration": str(max(30, min(600, int(seconds))))}
+        try:
+            await self.call("PUT", f"/v1.0/devices/{gateway_id}/enabled-sub-discovery", q)
+        except TuyaError:
+            await self.call("PUT", f"/v1.0/iot-03/devices/{gateway_id}/enabled-sub-discovery", q)
+
+    async def sub_devices(self, gateway_id: str, since: int = 0) -> list[dict]:
+        """Sub-devices that joined the gateway after `since` (unix seconds)."""
+        q = {"discovery_time": str(int(since))} if since else None
+        r = await self.call("GET", f"/v1.0/devices/{gateway_id}/list-sub", q)
+        return r if isinstance(r, list) else (r or {}).get("list", [])
+
     async def spec(self, device_id: str) -> dict:
         return await self.call("GET", f"/v1.0/iot-03/devices/{device_id}/specification")
 

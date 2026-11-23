@@ -6,6 +6,11 @@ const SEED=__SEED__;
 let DB=store.get("db")||SEED.db;
 let SCH=store.get("sch")||SEED.sch;
 const TUYA=store.get("tuya")||SEED.tuya;
+[{id:"bfGW1",name:"گيتوي زيگبي",online:true,category:"wg2",product:"Zigbee Gateway",status:{}},
+ {id:"bfCCC",name:"سبوت غرفة النوم",online:true,category:"dj",product:"Zigbee CCT Light",status:{switch_led:false,bright_value_v2:500,temp_value_v2:400}},
+ {id:"bfDDD",name:"بلك المطبخ",online:true,category:"cz",product:"Smart Plug",status:{switch_1:false,cur_power:0,cur_voltage:2300,cur_current:0}},
+ {id:"bfEEE",name:"شريط RGB",online:false,category:"dd",product:"LED Strip",status:{switch_led:false,bright_value_v2:800,colour_data_v2:{h:30,s:1000,v:1000},work_mode:"white"}}
+].forEach(x=>{if(!TUYA.some(t=>t.id===x.id))TUYA.push(x);});
 const saveDb=()=>store.set("db",DB),saveSch=()=>store.set("sch",SCH),saveTuya=()=>store.set("tuya",TUYA);
 // the app also keeps its own copy under this key; start it from the demo house
 try{if(!localStorage.getItem("knx-plan-v1"))localStorage.setItem("knx-plan-v1",JSON.stringify(DB));}catch(e){}
@@ -83,6 +88,7 @@ window.fetch=function(u,o){
   case "api/schedules":if(method==="PUT"){SCH={schedules:body.schedules||[],holiday:body.holiday||SCH.holiday};saveSch();return json({ok:true});}return json(Object.assign({sun},SCH));
   case "api/tuya/devices":return json({ok:true,devices:TUYA.slice().sort((a,b)=>a.name.localeCompare(b.name))});
   case "api/tuya/spec":return json({ok:true,spec:{}});
+  case "api/tuya/discover":setTimeout(()=>{if(!TUYA.some(t=>t.id==="bfNEW1")){TUYA.push({id:"bfNEW1",name:"سويچ زيگبي جديد",online:true,category:"kg",product:"Zigbee 2-gang switch",status:{switch_1:false,switch_2:false}});saveTuya();}},7000);return json({ok:true,seconds:body.seconds||120});
   case "api/scene":{const sc=(cur().scenes||[]).find(s=>s.id===body.id);if(!sc)return json({ok:false},404);return json({ok:true,count:runActions(sc.actions||[])});}
   case "api/scenes":cur().scenes=body.scenes||[];saveDb();return json({ok:true});
   case "api/owner":{const p=DB.projects.find(x=>x.id===body.project);if(p)p.devices.forEach(d=>{const c=(body.devices||{})[d.id];if(c){if(c.name)d.name=c.name;d.fav=!!c.fav;if(Number.isInteger(c.ord))d.ord=c.ord;}});if(p&&body.home)p.home=body.home;saveDb();return json({ok:true});}

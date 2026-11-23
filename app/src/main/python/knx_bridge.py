@@ -1546,6 +1546,28 @@ async def tuya_devices(req):
     return web.json_response({"ok": True, "devices": sorted(tuya_cache.values(), key=lambda d: d["name"])})
 
 
+async def tuya_discover(req):
+    """Installer: Zigbee gateway looks for new Tuya sub-devices for a while; they then show up in the device list."""
+    if not is_installer(req):
+        return web.json_response({"ok": False, "error": "للفني فقط"}, status=403)
+    if tuya is None:
+        return web.json_response({"ok": False, "error": "اكتب Access ID و Access Secret مال تويا بإعدادات KNX Prog"})
+    try:
+        body = await req.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    gw = str(body.get("gw") or "").strip()
+    if not gw:
+        return web.json_response({"ok": False, "error": "اختار الگيتوي"})
+    secs = int(body.get("seconds") or 120)
+    try:
+        await tuya.sub_discovery(gw, secs)
+    except Exception as err:  # noqa: BLE001
+        return web.json_response({"ok": False, "error": str(err)})
+    log.info("tuya gateway %s pairing for %ss", gw, secs)
+    return web.json_response({"ok": True, "seconds": secs, "since": int(time.time())})
+
+
 async def tuya_spec(req):
     if tuya is None:
         return web.json_response({"ok": False, "error": "Tuya not set"})
@@ -2463,6 +2485,7 @@ async def main() -> None:
         web.get("/api/bridge", bridge_info),
         web.get("/api/tuya/devices", tuya_devices),
         web.get("/api/tuya/spec", tuya_spec),
+        web.post("/api/tuya/discover", tuya_discover),
         web.get("/api/schedules", get_schedules),
         web.get("/three.js", three_js),
         web.get("/manifest.webmanifest", manifest),
